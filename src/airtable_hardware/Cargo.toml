@@ -1,0 +1,9 @@
+[package]
+name = "airtable_hardware"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+rclrs = "0.7"
+airtable_interfaces = { path = "../../install/airtable_interfaces/share/airtable_interfaces/rust" }

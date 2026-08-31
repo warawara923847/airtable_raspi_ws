@@ -1,0 +1,12 @@
+build/
+install/
+log/
+
+target/
+.cargo/
+
+.venv/
+
+*.bag
+*.db3
+*.mcap
