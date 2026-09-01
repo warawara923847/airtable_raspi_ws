@@ -196,7 +196,7 @@ dependencies = [
 
 [[package]]
 name = "builtin_interfaces"
-version = "1.2.3"
+version = "2.0.4"
 dependencies = [
  "rosidl_runtime_rs",
 ]
@@ -567,7 +567,9 @@ dependencies = [
 
 [[package]]
 name = "rosidl_runtime_rs"
-version = "0.6.0"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24b1243b39e62b536c0d634d4f1bed8098b94c00920ddcef14b4bcced372e89d"
 dependencies = [
  "cfg-if",
 ]
@@ -768,83 +770,59 @@ dependencies = [
 
 [[patch.unused]]
 name = "action_msgs"
-version = "1.2.3"
+version = "2.0.4"
 
 [[patch.unused]]
 name = "action_tutorials_interfaces"
-version = "0.20.9"
+version = "0.33.11"
 
 [[patch.unused]]
 name = "actionlib_msgs"
-version = "4.9.2"
+version = "5.3.8"
 
 [[patch.unused]]
 name = "actuator_msgs"
 version = "0.0.1"
 
 [[patch.unused]]
-name = "airtable_hardware"
-version = "0.1.0"
-
-[[patch.unused]]
 name = "composition_interfaces"
-version = "1.2.3"
+version = "2.0.4"
 
 [[patch.unused]]
 name = "diagnostic_msgs"
-version = "4.9.2"
+version = "5.3.8"
 
 [[patch.unused]]
 name = "example_interfaces"
-version = "0.9.3"
-
-[[patch.unused]]
-name = "examples_rclrs_logging_demo"
-version = "0.5.0"
-
-[[patch.unused]]
-name = "examples_rclrs_message_demo"
-version = "0.5.0"
-
-[[patch.unused]]
-name = "examples_rclrs_minimal_client_service"
-version = "0.5.0"
-
-[[patch.unused]]
-name = "examples_rclrs_minimal_pub_sub"
-version = "0.5.0"
-
-[[patch.unused]]
-name = "examples_rclrs_parameter_demo"
-version = "0.5.0"
-
-[[patch.unused]]
-name = "examples_rclrs_worker_demo"
-version = "0.5.0"
+version = "0.12.1"
 
 [[patch.unused]]
 name = "geometry_msgs"
-version = "4.9.2"
+version = "5.3.8"
 
 [[patch.unused]]
 name = "gps_msgs"
-version = "3.1.0"
+version = "2.1.2"
 
 [[patch.unused]]
 name = "lifecycle_msgs"
-version = "1.2.3"
+version = "2.0.4"
 
 [[patch.unused]]
 name = "logging_demo"
-version = "0.20.9"
+version = "0.33.11"
 
 [[patch.unused]]
 name = "map_msgs"
+version = "2.4.1"
+
+[[patch.unused]]
+name = "marine_acoustic_msgs"
 version = "2.1.0"
 
 [[patch.unused]]
 name = "nav_msgs"
-version = "4.9.2"
+version = "5.3.8"
 
 [[patch.unused]]
 name = "pcl_msgs"
@@ -852,79 +830,83 @@ version = "1.0.0"
 
 [[patch.unused]]
 name = "pendulum_msgs"
-version = "0.20.9"
+version = "0.33.11"
 
 [[patch.unused]]
 name = "rcl_interfaces"
-version = "1.2.3"
+version = "2.0.4"
 
 [[patch.unused]]
 name = "rmw_dds_common"
-version = "1.6.0"
+version = "3.1.1"
 
 [[patch.unused]]
 name = "ros_gz_interfaces"
-version = "0.244.25"
+version = "1.0.22"
 
 [[patch.unused]]
 name = "rosbag2_interfaces"
-version = "0.15.16"
+version = "0.26.11"
 
 [[patch.unused]]
 name = "rosgraph_msgs"
-version = "1.2.3"
-
-[[patch.unused]]
-name = "rust_pubsub"
-version = "0.5.0"
+version = "2.0.4"
 
 [[patch.unused]]
 name = "sensor_msgs"
-version = "4.9.2"
+version = "5.3.8"
+
+[[patch.unused]]
+name = "service_msgs"
+version = "2.0.4"
 
 [[patch.unused]]
 name = "shape_msgs"
-version = "4.9.2"
+version = "5.3.8"
+
+[[patch.unused]]
+name = "simulation_interfaces"
+version = "1.5.1"
 
 [[patch.unused]]
 name = "statistics_msgs"
-version = "1.2.3"
+version = "2.0.4"
 
 [[patch.unused]]
 name = "std_msgs"
-version = "4.9.2"
+version = "5.3.8"
 
 [[patch.unused]]
 name = "std_srvs"
-version = "4.9.2"
+version = "5.3.8"
 
 [[patch.unused]]
 name = "stereo_msgs"
-version = "4.9.2"
+version = "5.3.8"
 
 [[patch.unused]]
 name = "test_msgs"
-version = "1.2.3"
+version = "2.0.4"
 
 [[patch.unused]]
 name = "tf2_msgs"
-version = "0.25.22"
-
-[[patch.unused]]
-name = "theora_image_transport"
-version = "2.5.5"
+version = "0.36.21"
 
 [[patch.unused]]
 name = "trajectory_msgs"
-version = "4.9.2"
+version = "5.3.8"
 
 [[patch.unused]]
 name = "turtlesim"
-version = "1.4.3"
+version = "1.8.4"
+
+[[patch.unused]]
+name = "type_description_interfaces"
+version = "2.0.4"
 
 [[patch.unused]]
 name = "unique_identifier_msgs"
-version = "2.2.1"
+version = "2.5.1"
 
 [[patch.unused]]
 name = "vision_msgs"
@@ -932,4 +914,4 @@ version = "4.1.1"
 
 [[patch.unused]]
 name = "visualization_msgs"
-version = "4.9.2"
+version = "5.3.8"
