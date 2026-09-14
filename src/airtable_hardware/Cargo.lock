@@ -8,6 +8,8 @@ version = "0.1.0"
 dependencies = [
  "airtable_interfaces",
  "rclrs",
+ "sensor_msgs",
+ "trajectory_msgs",
 ]
 
 [[package]]
@@ -378,6 +380,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "geometry_msgs"
+version = "5.3.8"
+dependencies = [
+ "builtin_interfaces",
+ "rosidl_runtime_rs",
+ "std_msgs",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -609,10 +620,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "sensor_msgs"
+version = "5.3.8"
+dependencies = [
+ "builtin_interfaces",
+ "geometry_msgs",
+ "rosidl_runtime_rs",
+ "service_msgs",
+ "std_msgs",
+]
+
+[[package]]
+name = "service_msgs"
+version = "2.0.4"
+dependencies = [
+ "builtin_interfaces",
+ "rosidl_runtime_rs",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+
+[[package]]
+name = "std_msgs"
+version = "5.3.8"
+dependencies = [
+ "builtin_interfaces",
+ "rosidl_runtime_rs",
+]
 
 [[package]]
 name = "syn"
@@ -654,6 +692,16 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+]
+
+[[package]]
+name = "trajectory_msgs"
+version = "5.3.8"
+dependencies = [
+ "builtin_interfaces",
+ "geometry_msgs",
+ "rosidl_runtime_rs",
+ "std_msgs",
 ]
 
 [[package]]
@@ -797,10 +845,6 @@ name = "example_interfaces"
 version = "0.12.1"
 
 [[patch.unused]]
-name = "geometry_msgs"
-version = "5.3.8"
-
-[[patch.unused]]
 name = "gps_msgs"
 version = "2.1.2"
 
@@ -853,14 +897,6 @@ name = "rosgraph_msgs"
 version = "2.0.4"
 
 [[patch.unused]]
-name = "sensor_msgs"
-version = "5.3.8"
-
-[[patch.unused]]
-name = "service_msgs"
-version = "2.0.4"
-
-[[patch.unused]]
 name = "shape_msgs"
 version = "5.3.8"
 
@@ -871,10 +907,6 @@ version = "1.5.1"
 [[patch.unused]]
 name = "statistics_msgs"
 version = "2.0.4"
-
-[[patch.unused]]
-name = "std_msgs"
-version = "5.3.8"
 
 [[patch.unused]]
 name = "std_srvs"
@@ -893,8 +925,8 @@ name = "tf2_msgs"
 version = "0.36.21"
 
 [[patch.unused]]
-name = "trajectory_msgs"
-version = "5.3.8"
+name = "theora_image_transport"
+version = "4.0.7"
 
 [[patch.unused]]
 name = "turtlesim"

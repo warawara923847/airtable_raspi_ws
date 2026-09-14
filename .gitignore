@@ -10,3 +10,6 @@ target/
 *.bag
 *.db3
 *.mcap
+
+# LSP (clangd) 用の生成物
+compile_commands.json

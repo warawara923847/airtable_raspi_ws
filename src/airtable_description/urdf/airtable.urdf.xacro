@@ -1,0 +1,82 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro"
+       name="airtable">
+
+  <!-- ============================== -->
+  <!-- Parameters -->
+  <!-- ============================== -->
+
+  <xacro:property name="table_x_min" value="-0.1"/>
+  <xacro:property name="table_x_max" value="0.1"/>
+  <xacro:property name="table_y_min" value="-0.1"/>
+  <xacro:property name="table_y_max" value="0.1"/>
+
+  <!-- ============================== -->
+  <!-- Base -->
+  <!-- ============================== -->
+
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.5 0.5 0.02"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <!-- ============================== -->
+  <!-- X stage -->
+  <!-- ============================== -->
+
+  <link name="x_stage_link">
+    <visual>
+      <origin xyz="0 0 0.025"/>
+      <geometry>
+        <box size="0.20 0.05 0.03"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="table_x" type="prismatic">
+    <parent link="base_link"/>
+    <child link="x_stage_link"/>
+
+    <origin xyz="0 0 0.02" rpy="0 0 0"/>
+
+    <axis xyz="1 0 0"/>
+
+    <limit
+      lower="${table_x_min}"
+      upper="${table_x_max}"
+      effort="100"
+      velocity="0.2"/>
+  </joint>
+
+  <!-- ============================== -->
+  <!-- Y stage -->
+  <!-- ============================== -->
+
+  <link name="table_link">
+    <visual>
+      <origin xyz="0 0 0.025"/>
+      <geometry>
+        <box size="0.15 0.15 0.03"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="table_y" type="prismatic">
+    <parent link="x_stage_link"/>
+    <child link="table_link"/>
+
+    <origin xyz="0 0 0.03" rpy="0 0 0"/>
+
+    <axis xyz="0 1 0"/>
+
+    <limit
+      lower="${table_y_min}"
+      upper="${table_y_max}"
+      effort="100"
+      velocity="0.2"/>
+  </joint>
+
+</robot>

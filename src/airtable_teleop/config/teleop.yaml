@@ -1,0 +1,11 @@
+airtable_teleop:
+  ros__parameters:
+    pulse_duration_ms: 100
+
+    button_up: 11
+    button_down: 12
+    button_left: 13
+    button_right: 14
+
+    button_rotate_ccw: 9
+    button_rotate_cw: 10

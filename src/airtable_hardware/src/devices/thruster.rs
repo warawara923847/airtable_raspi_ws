@@ -1,47 +1,86 @@
 use crate::drivers::esc::EscDriver;
+use std::time::{Duration, Instant};
+
+use crate::drivers::valve::ValveDriver;
+
+#[derive(Debug, Clone, Copy)]
+pub enum ThrusterMode {
+    Off,
+    Continuous,
+    PulseUntil(Instant),
+}
 
 #[derive(Debug)]
 pub struct Thruster {
     name: String,
-    max_thrust_n: f64,
-    esc: EscDriver,
+    on_thrust_n: f64,
+    mode: ThrusterMode,
+    driver: ValveDriver,
 }
 
 impl Thruster {
-    pub fn new(name: impl Into<String>, max_thrust_n: f64, esc: EscDriver) -> Self {
+    pub fn new(name: impl Into<String>, on_thrust_n: f64) -> Self {
+        let name = name.into();
         Self {
-            name: name.into(),
-            max_thrust_n,
-            esc,
+            driver: ValveDriver::new(name.clone()),
+            name,
+            on_thrust_n,
+            mode: ThrusterMode::Off,
         }
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn fire_for(&mut self, duration: Duration) -> Result<(), String> {
+        if duration.is_zero() {
+            return Ok(());
+        }
+
+        self.driver.set_enabled(true)?;
+
+        self.mode = ThrusterMode::PulseUntil(Instant::now() + duration);
+
+        println!("[thruster] {} pulse for {:?}", self.name, duration);
+
+        Ok(())
     }
 
-    pub fn set_nominal_thrust(&mut self, thrust_n: f64) -> Result<(), String> {
-        if !thrust_n.is_finite() {
-            return Err(format!("{}: thrust command is not finite", self.name));
+    pub fn turn_on(&mut self) -> Result<(), String> {
+        self.driver.set_enabled(true)?;
+        self.mode = ThrusterMode::Continuous;
+
+        println!("[thruster] {} continuous ON", self.name);
+
+        Ok(())
+    }
+
+    pub fn turn_off(&mut self) -> Result<(), String> {
+        self.driver.set_enabled(false)?;
+        self.mode = ThrusterMode::Off;
+
+        println!("[thruster] {} OFF", self.name);
+
+        Ok(())
+    }
+
+    pub fn update(&mut self, now: Instant) -> Result<(), String> {
+        // enumのmatch構文, PulseUntilの場合はdeadlineを過ぎているかを判定
+        let should_stop = match self.mode {
+            ThrusterMode::PulseUntil(deadline) => now >= deadline,
+
+            _ => false,
+        };
+
+        if should_stop {
+            self.turn_off()?;
         }
 
-        if !(0.0..=self.max_thrust_n).contains(&thrust_n) {
-            return Err(format!(
-                "{}: thrust {:.3} N is outside [0, {:.3}] N",
-                self.name, thrust_n, self.max_thrust_n
-            ));
-        }
+        Ok(())
+    }
 
-        // Dummy linear model.
-        //
-        // Later this should be replaced with the actual thrust calibration model.
-        let normalized_command = thrust_n / self.max_thrust_n;
+    pub fn mode(&self) -> ThrusterMode {
+        self.mode
+    }
 
-        println!(
-            "[device] {}: {:.3} N -> {:.3}",
-            self.name, thrust_n, normalized_command
-        );
-
-        self.esc.set_command(normalized_command)
+    pub fn on_thrust_n(&self) -> f64 {
+        self.on_thrust_n
     }
 }

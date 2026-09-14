@@ -1,0 +1,5 @@
+# colcon build 実行時に常に適用されるデフォルト設定
+build:
+  # clangd (LSP) が参照する compile_commands.json を常に生成する
+  cmake-args:
+    - -DCMAKE_EXPORT_COMPILE_COMMANDS=ON

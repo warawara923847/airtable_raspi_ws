@@ -7,9 +7,37 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(airtable_interfaces REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
+
+add_executable(
+    airtable_teleop_node
+    src/teleop_node.cpp
+)
+
+ament_target_dependencies(
+    airtable_teleop_node
+    rclcpp
+    sensor_msgs
+    airtable_interfaces
+)
+
+install(
+    TARGETS
+        airtable_teleop_node
+    DESTINATION 
+        lib/${PROJECT_NAME}
+)
+
+install(
+    DIRECTORY 
+        config
+    DESTINATION share/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

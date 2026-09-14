@@ -1,0 +1,11 @@
+CompileFlags:
+  CompilationDatabase: build
+  Add:
+    - -std=c++17
+  Remove:
+    # GCC 固有オプションは clangd が解釈できないため除去
+    - -fno-*
+    - -mno-*
+    - --param=*
+Diagnostics:
+  UnusedIncludes: Strict

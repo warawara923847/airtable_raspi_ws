@@ -1,42 +1,65 @@
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use crate::devices::thruster::Thruster;
-use crate::drivers::esc::EscDriver;
-use crate::io::pwm::DummyPwm;
+use crate::devices::xy_table::XyTable;
 
 pub struct HardwareState {
     thrusters: HashMap<String, Thruster>,
+    xy_table: XyTable,
 }
 
 impl HardwareState {
     pub fn new_dummy() -> Self {
         let mut thrusters = HashMap::new();
 
-        let configs = [
-            ("thruster_1", 0_u8, 0.5_f64),
-            ("thruster_2", 1_u8, 0.5_f64),
-            ("thruster_3", 2_u8, 0.5_f64),
-        ];
-
-        for (name, pwm_channel, max_thrust_n) in configs {
-            let pwm = DummyPwm::new(pwm_channel);
-
-            let esc = EscDriver::new(pwm, 1000, 2000);
-
-            let thruster = Thruster::new(name, max_thrust_n, esc);
-
-            thrusters.insert(name.to_string(), thruster);
+        for name in ["thruster_1", "thruster_2", "thruster_3", "thruster_4"] {
+            thrusters.insert(name.to_string(), Thruster::new(name, 0.5));
         }
 
-        Self { thrusters }
+        Self {
+            thrusters,
+            xy_table: XyTable::new_dummy(),
+        }
     }
 
-    pub fn set_thruster(&mut self, name: &str, thrust_n: f64) -> Result<(), String> {
+    pub fn fire_thruster(&mut self, name: &str, duration: Duration) -> Result<(), String> {
         let thruster = self
             .thrusters
             .get_mut(name)
             .ok_or_else(|| format!("Unknown thruster: {name}"))?;
 
-        thruster.set_nominal_thrust(thrust_n)
+        thruster.fire_for(duration)
+    }
+
+    pub fn set_thruster_enabled(&mut self, name: &str, enabled: bool) -> Result<(), String> {
+        let thruster = self
+            .thrusters
+            .get_mut(name)
+            .ok_or_else(|| format!("Unknown thruster: {name}"))?;
+
+        if enabled {
+            thruster.turn_on()
+        } else {
+            thruster.turn_off()
+        }
+    }
+
+    pub fn update_thrusters(&mut self) -> Result<(), String> {
+        let now = Instant::now();
+
+        for thruster in self.thrusters.values_mut() {
+            thruster.update(now)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn move_xy_table(&mut self, x_m: f64, y_m: f64) -> Result<(), String> {
+        self.xy_table.move_to(x_m, y_m)
+    }
+
+    pub fn xy_table_position(&self) -> (f64, f64) {
+        self.xy_table.position()
     }
 }
