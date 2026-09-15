@@ -1,0 +1,109 @@
+<mujoco model="airtable">
+
+    <compiler angle="degree"/>
+
+    <option timestep="0.002" gravity="0 0 0" />
+
+    <visual>
+        <global azimuth="90" elevation="-90" />
+    </visual>
+
+    <worldbody>
+
+        <light pos="0 0 2" dir="0 0 -1" />
+
+        <geom
+            name="floor"
+            type="plane"
+            size="2 2 0.01"
+            rgba="0.8 0.8 0.8 1.0"
+        />
+
+        <body name="airtable_body" pos="0 0 0.05">
+
+            <joint name="x" type="slide" axis="1 0 0"/>
+            <joint name="y" type="slide" axis="0 1 0"/>
+            <joint name="yaw" type="hinge" axis="0 0 1"/>
+
+            <geom
+                name="body_geom"
+                type="box"
+                size="0.25 0.25 0.02"
+                mass="10.0"
+                rgba="0.3 0.5 0.8 1.0"
+            />
+
+        <!-- Thruster 1 -->
+        <site
+            name="thruster_1"
+            pos="0.1 0.1 0"
+            euler="0 0 135"
+            type="box"
+            size="0.025 0.008 0.008"
+            rgba="1 0 0 1"
+        />
+
+        <site
+            name="thruster_2"
+            pos="0.1 -0.1 0"
+            euler="0 0 -135"
+            type="box"
+            size="0.025 0.008 0.008"
+            rgba="1 0 0 1"
+        />
+
+        <site
+            name="thruster_3"
+            pos="-0.1 -0.1 0"
+            euler="0 0 -45"
+            type="box"
+            size="0.025 0.008 0.008"
+            rgba="1 0 0 1"
+        />
+
+        <site
+            name="thruster_4"
+            pos="-0.1 0.1 0"
+            euler="0 0 45"
+            type="box"
+            size="0.025 0.008 0.008"
+            rgba="1 0 0 1"
+        />
+
+        </body>
+    </worldbody>
+
+    <actuator>
+        <motor
+            name="thruster_1_actuator"
+            site="thruster_1"
+            gear="1 0 0 0 0 0"
+            ctrllimited="true"
+            ctrlrange="0 0.5"
+        />
+
+        <motor
+            name="thruster_2_actuator"
+            site="thruster_2"
+            gear="1 0 0 0 0 0"
+            ctrllimited="true"
+            ctrlrange="0 0.5"
+        />
+
+        <motor
+            name="thruster_3_actuator"
+            site="thruster_3"
+            gear="1 0 0 0 0 0"
+            ctrllimited="true"
+            ctrlrange="0 0.5"
+        />
+
+        <motor
+            name="thruster_4_actuator"
+            site="thruster_4"
+            gear="1 0 0 0 0 0"
+            ctrllimited="true"
+            ctrlrange="0 0.5"
+        />
+    </actuator>
+</mujoco>

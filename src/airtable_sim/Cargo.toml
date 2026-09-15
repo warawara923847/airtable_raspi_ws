@@ -1,0 +1,15 @@
+[package]
+name = "airtable_sim"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rclrs = "0.7"
+airtable_interfaces = {path = "../../install/airtable_interfaces/share/airtable_interfaces/rust"}
+
+[dependencies.mujoco-rs]
+version = "6.0.1"
+features = [
+    "auto-download-mujoco",
+    "viewer-ui",
+] 

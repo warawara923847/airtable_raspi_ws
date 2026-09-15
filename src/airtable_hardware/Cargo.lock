@@ -846,7 +846,7 @@ version = "0.12.1"
 
 [[patch.unused]]
 name = "gps_msgs"
-version = "2.1.2"
+version = "3.1.1"
 
 [[patch.unused]]
 name = "lifecycle_msgs"
@@ -886,7 +886,7 @@ version = "3.1.1"
 
 [[patch.unused]]
 name = "ros_gz_interfaces"
-version = "1.0.22"
+version = "1.0.24"
 
 [[patch.unused]]
 name = "rosbag2_interfaces"
@@ -922,7 +922,7 @@ version = "2.0.4"
 
 [[patch.unused]]
 name = "tf2_msgs"
-version = "0.36.21"
+version = "0.36.22"
 
 [[patch.unused]]
 name = "theora_image_transport"

@@ -43,7 +43,21 @@ Rust 1.85 以降が必要です。
 uv sync
 ```
 
-### 4. ビルド
+### 4. `rust_packages` インデックスの確認
+
+`colcon-ros-cargo` は `/opt/ros/jazzy/share/ament_index/resource_index/rust_packages/`
+を見て `.cargo/config.toml` の patch 対象を決めますが、このインデックスを
+収録した deb は存在せず、apt の更新で消えることがあります。消えたまま
+ビルドすると `sensor_msgs` 等が crates.io から解決され失敗します
+（詳細は [apt更新で `rust_packages` インデックスが消える問題](#apt更新で-rust_packages-インデックスが消える問題2026-09-15)）。
+
+```bash
+./scripts/restore_rust_packages_index.sh
+```
+
+冪等なので、ビルド前に毎回実行しても問題ありません。
+
+### 5. ビルド
 
 **ROSの`PYTHONPATH`を維持したまま**、venv側のcolconを使用します。
 `ament_package` などのROS Pythonモジュールは
@@ -57,7 +71,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 source install/setup.bash
 ```
 
-### 5. 動作確認
+### 6. 動作確認
 
 ```bash
 ros2 run airtable_hardware airtable_hardware
@@ -132,6 +146,68 @@ patch先の `install/airtable_interfaces/share/airtable_interfaces/rust` は
 なお、この問題自体はJazzy固有ではなくHumbleでも `COLCON_IGNORE` を外せば
 解消した可能性が高いですが、Jazzyではros2_rustのソースビルドが不要になった分、
 構成がシンプルで再現性が高くなっています。
+
+### apt更新で `rust_packages` インデックスが消える問題（2026-09-15）
+
+上記とは別に、**apt の自動更新によって patch が生成されなくなる**事象が発生しました。
+症状は次のビルドエラーです。
+
+```
+error: failed to select a version for the requirement `sensor_msgs = "*"`
+  version 4.2.3 is yanked
+location searched: crates.io index
+```
+
+`sensor_msgs` がローカルの ROS ではなく crates.io から解決されており、
+そちらの 4.2.3 が yank 済みのため選択肢がゼロになっています。
+
+**原因**は `colcon-ros-cargo` の patch 生成が参照するインデックスの消失です。
+`find_installed_cargo_packages`（`colcon_ros_cargo/task/ament_cargo/build.py`）は
+patch 対象を次の場所からのみ列挙します。
+
+```python
+packages_dir = prefix / 'share' / 'ament_index' / 'resource_index' / 'rust_packages'
+if packages_dir.exists():
+    packages = {path.name for path in packages_dir.iterdir()}
+else:
+    packages = set()          # 見つからないと黙って空集合を返す
+```
+
+このとき Rust バインディング本体（`/opt/ros/jazzy/share/<pkg>/rust/`）は
+39件すべて健在でしたが、`rust_packages/` だけが失われていました。
+結果、生成される `.cargo/config.toml` はワークスペース内でビルドした
+`airtable_interfaces` の1件のみになります。`airtable_interfaces` が残るのは、
+自前の `install/` 側に `rust_packages` を登録しているためです。
+
+**このインデックスを収録している deb は存在しません。**
+
+```
+ros-jazzy-sensor-msgs: /opt/ros/jazzy/share/sensor_msgs/rust   ← 所有者あり
+dpkg-query: no path found matching pattern .../rust_packages   ← 所有者なし
+```
+
+apt のログから、無人の自動更新が引き金と判明しています。
+
+```
+2026-09-15 09:21:49  aptdaemon role='role-commit-packages'
+```
+
+所有者が居ない以上、**今後の apt 更新でも再発しえます**。
+
+**対処**として `scripts/restore_rust_packages_index.sh` を追加しました。
+`share/<pkg>/rust/Cargo.toml` の実在を根拠にインデックスを再生成します。
+冪等なので、再発時やビルド前に何度実行しても構いません。
+
+```bash
+./scripts/restore_rust_packages_index.sh
+```
+
+Jazzy 以外を使う場合は `ROS_PREFIX=/opt/ros/<distro>` で上書きできます。
+
+なお `Cargo.toml` の `sensor_msgs = "*"` を path 指定に変える回避策も考えられますが、
+`sensor_msgs` は内部で `geometry_msgs` / `std_msgs` / `builtin_interfaces` /
+`service_msgs` に依存しており、これらは依然 patch 経由で解決されます。
+間接依存まで塞ぐには結局39件を手書きすることになるため、採用していません。
 
 **未対応**
 - Raspberry Pi実機での検証（本作業はx86_64のWSL上のみ）
