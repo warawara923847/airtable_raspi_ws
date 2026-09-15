@@ -1,6 +1,7 @@
 mod ros;
 mod simulation;
 mod thruster;
+mod vehicle;
 
 use std::time::Duration;
 

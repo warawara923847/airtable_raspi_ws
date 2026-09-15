@@ -4,12 +4,6 @@
 （`airtable_hardware`）は Rust（[rclrs](https://github.com/ros2-rust/ros2_rust)）
 で実装されており、`ament_cargo` ビルドタイプを使用します。
 
-> **ROS 2 Jazzy移行について**
-> 本ワークスペースは ROS 2 Humble (Ubuntu 22.04) から ROS 2 Jazzy
-> (Ubuntu 24.04) への移行を`jazzy`ブランチで試行中です。mainブランチは
-> 引き続きHumble前提のままです。移行状況は
-> [ROS 2 Jazzy移行（作業中）](#ros-2-jazzy移行作業中) を参照してください。
-
 ## セットアップ（Jazzy）
 
 ### 1. ROS 2 Jazzy と依存パッケージ
@@ -49,7 +43,7 @@ uv sync
 を見て `.cargo/config.toml` の patch 対象を決めますが、このインデックスを
 収録した deb は存在せず、apt の更新で消えることがあります。消えたまま
 ビルドすると `sensor_msgs` 等が crates.io から解決され失敗します
-（詳細は [apt更新で `rust_packages` インデックスが消える問題](#apt更新で-rust_packages-インデックスが消える問題2026-09-15)）。
+（詳細は [0002. `rust_packages` インデックスを自前で復元する](docs/adr/0002-rust-packages-index-loss.md)）。
 
 ```bash
 ./scripts/restore_rust_packages_index.sh
@@ -88,132 +82,66 @@ ros2 topic pub --once /actuators/thrusters/setpoint airtable_interfaces/msg/Thru
 持ちます。ESCドライバとPWM出力は現状スタブ実装（`DummyPwm`）で、
 標準出力にログを出すだけです。
 
-## ROS 2 Jazzy移行（作業中）
+## パッケージ構成
 
-### 結論: Humble時代より大幅に簡素化されました
+| パッケージ | 言語 | 役割 | 状況 |
+|---|---|---|---|
+| `airtable_interfaces` | IDL | 独自メッセージ定義（msg 3種） | 実装済み |
+| `airtable_hardware` | Rust (rclrs) | 実機 I/O。ESC / ステッパ / バルブ / IMU | 実装済み（I/O層はスタブ） |
+| `airtable_sim` | Rust (rclrs) + MuJoCo | 物理シミュレーション | 実装済み |
+| `airtable_controller` | C++ | 手動ミキサと制御配分 | 実装済み |
+| `airtable_teleop` | C++ | ゲームパッド入力 → 手動指令 | 実装済み |
+| `airtable_bringup` | Python launch | 起動構成（実機 / シミュレーション） | 実装済み |
+| `airtable_description` | URDF/xacro | ロボットモデル | URDF と display launch のみ |
+| `airtable_estimator` | C++ | （未定義） | 未実装 |
+| `airtable_ground` | C++ | （未定義） | 未実装 |
+| `airtable_safety` | C++ | （未定義） | 未実装 |
+| `airtable_tracking` | C++ | （未定義） | 未実装 |
 
-Humbleでは `ros2_rust` をソースからワークスペースに取り込む必要がありましたが、
-Jazzyでは apt と crates.io だけで完結します。移行前の `Cargo.lock` には
-`examples_rclrs_*`（ros2_rustのサンプルパッケージ）が含まれ、
-`rosidl_runtime_rs` がパス依存になっていましたが、いずれも不要になりました。
+未実装の4パッケージは `CMakeLists.txt` と `package.xml` のみで、`package.xml` の
+`<description>` も `TODO` のままです。役割を決めた時点で追記してください。
 
-**Jazzyで判明した改善点**
-- `ros-jazzy-rosidl-generator-rs` が apt で提供される（0.4.12）
-- **標準メッセージパッケージのdeb自体にRustバインディングが同梱**されている。
-  `ros-jazzy-builtin-interfaces` などが `/opt/ros/jazzy/share/<pkg>/rust/` を
-  インストールするため、`colcon-ros-cargo` が生成する `.cargo/config.toml` の
-  `[patch.crates-io.*]` は39/39すべて実体に解決される
-- `rosidl_runtime_rs` (0.6.1) と `rclrs` (0.7.0) は crates.io から取得
-
-**確認済み**
-- `rm -rf build install log .cargo` で完全にクリーンにした状態から、
-  `colcon build` ワンショットで全11パッケージのビルド成功。
-  `airtable_interfaces` → `airtable_hardware` の依存順も自動解決される
-- 実行時の動作確認: ROSメッセージ受信 → デバイス層 → ESCドライバ →
-  PWM出力までの全レイヤーと、`names`/`thrust` の長さ不一致に対する
-  バリデーションが正しく機能
-- `pyproject.toml` の `requires-python` を `>=3.12,<3.13` に更新
-  （Jazzy標準のPython 3.12に追従）
-- `colcon-common-extensions` を dev 依存に追加。これが無いと venv 側の
-  colcon に `--packages-select` などの拡張が入らない
-
-### `.cargo/config.toml` が生成されない問題について
-
-Humble環境では、`colcon-ros-cargo` が `.cargo/config.toml` を正しく生成せず、
-`airtable_interfaces` のパス依存が解決できない問題が発生していました。
-**この問題の直接の原因は `src/airtable_interfaces/COLCON_IGNORE` です。**
-
-`airtable_interfaces` の patch エントリには鶏と卵の依存関係があります。
-patch先の `install/airtable_interfaces/share/airtable_interfaces/rust` は
-`airtable_interfaces` をビルドして初めて生成されるため、`colcon-ros-cargo` が
-`airtable_hardware` のビルド時点でそれを発見できる必要があります。
-`COLCON_IGNORE` があると `airtable_interfaces` が colcon から完全に不可視になり、
-
-1. `install/` に生成物が出ない
-2. → `colcon-ros-cargo` が patch エントリを作れない
-3. → `Cargo.toml` の path 依存が解決できない
-
-という連鎖が起きます。そのため `COLCON_IGNORE` は**削除しました**（再追加しないこと）。
-
-検証として `.cargo/` ごと削除した状態から `colcon build` を実行し、
-以下を確認済みです。
-
-- `.cargo/config.toml` が新規に自動生成される
-- `[patch.crates-io.airtable_interfaces]` が
-  `install/airtable_interfaces/share/airtable_interfaces/rust` を正しく指す
-- patch対象39件すべてが実在するパスに解決される（欠損ゼロ）
-
-なお、この問題自体はJazzy固有ではなくHumbleでも `COLCON_IGNORE` を外せば
-解消した可能性が高いですが、Jazzyではros2_rustのソースビルドが不要になった分、
-構成がシンプルで再現性が高くなっています。
-
-### apt更新で `rust_packages` インデックスが消える問題（2026-09-15）
-
-上記とは別に、**apt の自動更新によって patch が生成されなくなる**事象が発生しました。
-症状は次のビルドエラーです。
+### データフロー
 
 ```
-error: failed to select a version for the requirement `sensor_msgs = "*"`
-  version 4.2.3 is yanked
-location searched: crates.io index
+/joy (sensor_msgs/Joy)
+  └─ airtable_teleop
+       └─ /commands/manual/motion (ManualMotionCommand)
+            └─ airtable_controller
+                 ├─ /actuators/thrusters/pulse    (ThrusterPulseCommand)
+                 └─ /actuators/thrusters/setpoint (ThrusterSetpoint)
+                      └─ airtable_sim / airtable_hardware
 ```
 
-`sensor_msgs` がローカルの ROS ではなく crates.io から解決されており、
-そちらの 4.2.3 が yank 済みのため選択肢がゼロになっています。
+`airtable_controller` は `/wrench_cmd` (geometry_msgs/WrenchStamped) も購読し、
+制御配分を通して `setpoint` を出しますが、この上流ノードは未実装です。
+`airtable_hardware` はさらに `actuators/xy_table/trajectory` を購読し、
+`imu/data_raw` を publish します。
 
-**原因**は `colcon-ros-cargo` の patch 生成が参照するインデックスの消失です。
-`find_installed_cargo_packages`（`colcon_ros_cargo/task/ament_cargo/build.py`）は
-patch 対象を次の場所からのみ列挙します。
-
-```python
-packages_dir = prefix / 'share' / 'ament_index' / 'resource_index' / 'rust_packages'
-if packages_dir.exists():
-    packages = {path.name for path in packages_dir.iterdir()}
-else:
-    packages = set()          # 見つからないと黙って空集合を返す
-```
-
-このとき Rust バインディング本体（`/opt/ros/jazzy/share/<pkg>/rust/`）は
-39件すべて健在でしたが、`rust_packages/` だけが失われていました。
-結果、生成される `.cargo/config.toml` はワークスペース内でビルドした
-`airtable_interfaces` の1件のみになります。`airtable_interfaces` が残るのは、
-自前の `install/` 側に `rust_packages` を登録しているためです。
-
-**このインデックスを収録している deb は存在しません。**
-
-```
-ros-jazzy-sensor-msgs: /opt/ros/jazzy/share/sensor_msgs/rust   ← 所有者あり
-dpkg-query: no path found matching pattern .../rust_packages   ← 所有者なし
-```
-
-apt のログから、無人の自動更新が引き金と判明しています。
-
-```
-2026-09-15 09:21:49  aptdaemon role='role-commit-packages'
-```
-
-所有者が居ない以上、**今後の apt 更新でも再発しえます**。
-
-**対処**として `scripts/restore_rust_packages_index.sh` を追加しました。
-`share/<pkg>/rust/Cargo.toml` の実在を根拠にインデックスを再生成します。
-冪等なので、再発時やビルド前に何度実行しても構いません。
+### 起動
 
 ```bash
-./scripts/restore_rust_packages_index.sh
+ros2 launch airtable_bringup simulation_control.launch.py   # シミュレーション
+ros2 launch airtable_bringup manual_control.launch.py       # 実機
 ```
 
-Jazzy 以外を使う場合は `ROS_PREFIX=/opt/ros/<distro>` で上書きできます。
+## 設計判断の記録
 
-なお `Cargo.toml` の `sensor_msgs = "*"` を path 指定に変える回避策も考えられますが、
-`sensor_msgs` は内部で `geometry_msgs` / `std_msgs` / `builtin_interfaces` /
-`service_msgs` に依存しており、これらは依然 patch 経由で解決されます。
-間接依存まで塞ぐには結局39件を手書きすることになるため、採用していません。
+調査して結論の出たハマりどころは [docs/adr/](docs/adr/) に1件1ファイルで
+残しています。
 
-**未対応**
-- Raspberry Pi実機での検証（本作業はx86_64のWSL上のみ）
-- `io/pwm.rs` は `DummyPwm` のスタブ実装のまま。実機のGPIO/PWM
-  ドライバは未実装
-- `airtable_bringup` / `airtable_controller` / `airtable_description` /
-  `airtable_estimator` / `airtable_ground` / `airtable_safety` /
-  `airtable_sim` / `airtable_teleop` / `airtable_tracking` は
-  依存宣言のみのスケルトンで、実装が入った時点で改めてAPI互換の確認が必要
+- [0001. `COLCON_IGNORE` を削除する](docs/adr/0001-colcon-ignore-removal.md)
+  — これがあると `.cargo/config.toml` の patch 生成が連鎖的に失敗する
+- [0002. `rust_packages` インデックスを自前で復元する](docs/adr/0002-rust-packages-index-loss.md)
+  — apt更新で消え、`sensor_msgs` が crates.io から解決されてビルドが落ちる
+- [0003. ROS 2 Humble から Jazzy へ移行する](docs/adr/0003-jazzy-migration.md)
+  — ros2_rust のソース取り込みが不要になり構成が簡素化
+
+## 進行中の作業と残課題
+
+[docs/WORKLOG.md](docs/WORKLOG.md) を参照してください。
+
+## AIエージェント向けの前提
+
+[CLAUDE.md](CLAUDE.md) にビルド手順の厳守事項、探索しなくてよいディレクトリ、
+実装上の約束をまとめています。

@@ -15,7 +15,7 @@ pub fn handle_thruster_pulse(simulation: &mut Simulation, msg: ThrusterPulseComm
     }
 
     for name in &msg.names {
-        if let Err(error) = simulation.fire_thruster(name, duration_s) {
+        if let Err(error) = simulation.fire_thruster("robot_1", name, duration_s) {
             eprintln!("[sim] error firing thruster {}: {}", name, error);
         }
     }

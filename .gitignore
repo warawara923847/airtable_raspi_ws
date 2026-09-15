@@ -13,3 +13,8 @@ target/
 
 # LSP (clangd) 用の生成物
 compile_commands.json
+
+# Claude Code の設定ファイル
+.claude/
+docs/
+CLAUDE.md
