@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>airtable_sim</name>
+  <version>0.1.0</version>
+
+  <description>MuJoCo-based simulation for the airtable robot.</description>
+
+  <maintainer email="warawarafujifuji0409@gmail.com">fujiitsu</maintainer>
+  <license>TODO</license>
+
+  <depend>rclrs</depend>
+  <depend>airtable_interfaces</depend>
+
+  <export>
+    <build_type>ament_cargo</build_type>
+  </export>
+</package>
