@@ -60,6 +60,7 @@ version = "0.1.0"
 dependencies = [
  "airtable_interfaces",
  "mujoco-rs",
+ "nav_msgs",
  "rclrs",
 ]
 
@@ -923,6 +924,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "geometry_msgs"
+version = "5.3.8"
+dependencies = [
+ "builtin_interfaces",
+ "rosidl_runtime_rs",
+ "std_msgs",
+]
+
+[[package]]
 name = "gethostname"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1418,6 +1428,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "nav_msgs"
+version = "5.3.8"
+dependencies = [
+ "builtin_interfaces",
+ "geometry_msgs",
+ "rosidl_runtime_rs",
+ "service_msgs",
+ "std_msgs",
 ]
 
 [[package]]
@@ -2214,6 +2235,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "service_msgs"
+version = "2.0.4"
+dependencies = [
+ "builtin_interfaces",
+ "rosidl_runtime_rs",
+]
+
+[[package]]
 name = "sha2"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2315,6 +2344,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd538fb6910ac1099850255cf94a94df6551fbdd602454387d0adb2d1ca6dead"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "std_msgs"
+version = "5.3.8"
+dependencies = [
+ "builtin_interfaces",
+ "rosidl_runtime_rs",
 ]
 
 [[package]]
@@ -3162,10 +3199,6 @@ name = "example_interfaces"
 version = "0.12.1"
 
 [[patch.unused]]
-name = "geometry_msgs"
-version = "5.3.8"
-
-[[patch.unused]]
 name = "gps_msgs"
 version = "3.1.1"
 
@@ -3184,10 +3217,6 @@ version = "2.4.1"
 [[patch.unused]]
 name = "marine_acoustic_msgs"
 version = "2.1.0"
-
-[[patch.unused]]
-name = "nav_msgs"
-version = "5.3.8"
 
 [[patch.unused]]
 name = "pcl_msgs"
@@ -3222,10 +3251,6 @@ name = "sensor_msgs"
 version = "5.3.8"
 
 [[patch.unused]]
-name = "service_msgs"
-version = "2.0.4"
-
-[[patch.unused]]
 name = "shape_msgs"
 version = "5.3.8"
 
@@ -3236,10 +3261,6 @@ version = "1.5.1"
 [[patch.unused]]
 name = "statistics_msgs"
 version = "2.0.4"
-
-[[patch.unused]]
-name = "std_msgs"
-version = "5.3.8"
 
 [[patch.unused]]
 name = "std_srvs"

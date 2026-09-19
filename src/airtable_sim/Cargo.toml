@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 rclrs = "0.7"
 airtable_interfaces = {path = "../../install/airtable_interfaces/share/airtable_interfaces/rust"}
+nav_msgs = "*"
 
 [dependencies.mujoco-rs]
 version = "6.0.1"

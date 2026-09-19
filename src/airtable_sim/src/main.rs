@@ -1,12 +1,16 @@
 mod ros;
 mod simulation;
+mod state;
+mod table;
 mod thruster;
 mod vehicle;
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
+use nav_msgs::msg::Odometry;
 use rclrs::{Context, CreateBasicExecutor, RclrsErrorFilter, SpinOptions};
 
+use crate::ros::publishers::GroundTruthPublisher;
 use crate::simulation::Simulation;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -26,6 +30,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (simulation, mut viewer) =
         Simulation::new_with_viewer(model_path).map_err(std::io::Error::other)?;
+
+    // ------------------------------------------------
+    // Ground Truth publishers
+    // ------------------------------------------------
+    let mut gt_publishers = HashMap::new();
+
+    for vehicle_name in simulation.vehicle_names() {
+        let table_name = simulation.vehicle_table(&vehicle_name)?.name().to_string();
+
+        let topic = format!("/{vehicle_name}/sim/ground_truth");
+
+        let child_frame_id = format!("{vehicle_name}/base_link");
+
+        let publisher = node.create_publisher::<Odometry>(topic.as_str())?;
+
+        println!(
+            "[sim] GT: {} -> {} [{} -> {}]",
+            vehicle_name, topic, table_name, child_frame_id,
+        );
+
+        gt_publishers.insert(
+            vehicle_name,
+            GroundTruthPublisher::new(publisher, table_name, child_frame_id),
+        );
+    }
 
     let simulation_worker = node.create_worker(simulation);
 
@@ -47,6 +76,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Duration::from_millis(16),
         |simulation: &mut Simulation, _time: rclrs::Time| {
             simulation.sync_viewer();
+        },
+    )?;
+
+    let _ground_truth_timer = simulation_worker.create_timer_repeating(
+        Duration::from_millis(10),
+        move |simulation: &mut Simulation, _time: rclrs::Time| {
+            for (vehicle_name, publisher) in &gt_publishers {
+                let state = match simulation.vehicle_state(vehicle_name) {
+                    Ok(state) => state,
+                    Err(error) => {
+                        eprintln!("[sim] failed to get GT for {}: {}", vehicle_name, error);
+                        continue;
+                    }
+                };
+
+                if let Err(error) = publisher.publish(&state) {
+                    eprintln!("[sim] failed to publish GT for {}: {}", vehicle_name, error);
+                }
+            }
         },
     )?;
 
