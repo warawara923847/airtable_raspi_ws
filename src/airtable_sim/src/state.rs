@@ -10,3 +10,10 @@ pub struct PlanarState {
     pub vy: f64,
     pub wz: f64,
 }
+
+#[derive(Debug, Clone)]
+pub struct TablePose {
+    pub name: String,
+    pub position: [f64; 3],
+    pub orientation_wxyz: [f64; 4],
+}

@@ -8,10 +8,17 @@ mod vehicle;
 use std::{collections::HashMap, time::Duration};
 
 use nav_msgs::msg::Odometry;
-use rclrs::{Context, CreateBasicExecutor, RclrsErrorFilter, SpinOptions};
+use rclrs::{Context, CreateBasicExecutor, IntoPrimitiveOptions, RclrsErrorFilter, SpinOptions};
+use tf2_msgs::msg::TFMessage;
 
 use crate::ros::publishers::GroundTruthPublisher;
+use crate::ros::tf::TfPublishers;
 use crate::simulation::Simulation;
+
+struct VehicleRosHandles {
+    gt_publisher: GroundTruthPublisher,
+    table_frame: String,
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     //
@@ -34,10 +41,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ------------------------------------------------
     // Ground Truth publishers
     // ------------------------------------------------
-    let mut gt_publishers = HashMap::new();
+    let mut vehicle_ros_handles = HashMap::new();
 
     for vehicle_name in simulation.vehicle_names() {
-        let table_name = simulation.vehicle_table(&vehicle_name)?.name().to_string();
+        let table_frame = simulation.vehicle_table(&vehicle_name)?.name().to_string();
 
         let topic = format!("/{vehicle_name}/sim/ground_truth");
 
@@ -45,16 +52,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let publisher = node.create_publisher::<Odometry>(topic.as_str())?;
 
-        println!(
-            "[sim] GT: {} -> {} [{} -> {}]",
-            vehicle_name, topic, table_name, child_frame_id,
-        );
-
-        gt_publishers.insert(
+        let gt_publisher =
+            GroundTruthPublisher::new(publisher, table_frame.clone(), child_frame_id);
+        vehicle_ros_handles.insert(
             vehicle_name,
-            GroundTruthPublisher::new(publisher, table_name, child_frame_id),
+            VehicleRosHandles {
+                gt_publisher,
+                table_frame,
+            },
         );
     }
+
+    // ------------------------------------------------
+    // TF publishers
+    // ------------------------------------------------
+    let static_tf_publisher =
+        node.create_publisher::<TFMessage>("/tf_static".keep_last(1).transient_local())?;
+
+    let dynamic_tf_publisher = node.create_publisher::<TFMessage>("/tf".keep_last(100))?;
+
+    // Table TF publish
+    let table_poses = simulation.table_poses();
+
+    let tf_publishers = TfPublishers::new(dynamic_tf_publisher, static_tf_publisher);
+
+    tf_publishers.publish_static_tables(&table_poses)?;
 
     let simulation_worker = node.create_worker(simulation);
 
@@ -79,10 +101,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
 
-    let _ground_truth_timer = simulation_worker.create_timer_repeating(
+    let _state_publish_timer = simulation_worker.create_timer_repeating(
         Duration::from_millis(10),
         move |simulation: &mut Simulation, _time: rclrs::Time| {
-            for (vehicle_name, publisher) in &gt_publishers {
+            for (vehicle_name, handles) in &vehicle_ros_handles {
                 let state = match simulation.vehicle_state(vehicle_name) {
                     Ok(state) => state,
                     Err(error) => {
@@ -91,8 +113,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 };
 
-                if let Err(error) = publisher.publish(&state) {
+                // ------------------------------------------------
+                // Ground Truth
+                // ------------------------------------------------
+                if let Err(error) = handles.gt_publisher.publish(&state) {
                     eprintln!("[sim] failed to publish GT for {}: {}", vehicle_name, error);
+                }
+
+                // ------------------------------------------------
+                // Dynamic TF
+                // table_N -> robot_N/base_link
+                // ------------------------------------------------
+                if let Err(error) =
+                    tf_publishers.publish_vehicle(&handles.table_frame, vehicle_name, &state)
+                {
+                    eprintln!("[sim] failed to publish TF for {}: {}", vehicle_name, error);
                 }
             }
         },

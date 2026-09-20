@@ -5,7 +5,7 @@ use mujoco_rs::prelude::*;
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::viewer::ViewerSharedState;
 
-use crate::state::PlanarState;
+use crate::state::{PlanarState, TablePose};
 use crate::table::SimTable;
 use crate::thruster::SimThruster;
 use crate::vehicle::SimVehicle;
@@ -91,9 +91,12 @@ impl Simulation {
     }
 
     fn from_data(
-        data: MjData<Box<MjModel>>,
+        mut data: MjData<Box<MjModel>>,
         viewer_state: Option<Arc<Mutex<ViewerSharedState>>>,
     ) -> Result<Self, String> {
+        // qposからxpos/xquatを初期計算
+        data.forward();
+
         let vehicles = Self::build_vehicles(&data)?;
 
         let tables = Self::build_tables(&data, &vehicles)?;
@@ -289,6 +292,23 @@ impl Simulation {
         self.tables
             .get(table_name)
             .ok_or_else(|| format!("table '{}' not registered", table_name))
+    }
+
+    pub fn table_poses(&self) -> Vec<TablePose> {
+        self.tables
+            .values()
+            .map(|table| {
+                let position = self.data.xpos()[table.body_id()];
+
+                let orientation = self.data.xquat()[table.body_id()];
+
+                TablePose {
+                    name: table.name().to_string(),
+                    position,
+                    orientation_wxyz: orientation,
+                }
+            })
+            .collect()
     }
 
     pub fn sync_viewer(&mut self) {

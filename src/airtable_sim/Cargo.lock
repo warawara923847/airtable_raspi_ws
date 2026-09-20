@@ -28,6 +28,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "action_msgs"
+version = "2.0.4"
+dependencies = [
+ "builtin_interfaces",
+ "rosidl_runtime_rs",
+ "service_msgs",
+ "unique_identifier_msgs",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -59,9 +69,11 @@ name = "airtable_sim"
 version = "0.1.0"
 dependencies = [
  "airtable_interfaces",
+ "geometry_msgs",
  "mujoco-rs",
  "nav_msgs",
  "rclrs",
+ "tf2_msgs",
 ]
 
 [[package]]
@@ -2400,6 +2412,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tf2_msgs"
+version = "0.36.22"
+dependencies = [
+ "action_msgs",
+ "builtin_interfaces",
+ "geometry_msgs",
+ "rosidl_runtime_rs",
+ "service_msgs",
+ "std_msgs",
+ "unique_identifier_msgs",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2565,6 +2590,13 @@ name = "unicode-segmentation"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
+
+[[package]]
+name = "unique_identifier_msgs"
+version = "2.5.1"
+dependencies = [
+ "rosidl_runtime_rs",
+]
 
 [[package]]
 name = "untrusted"
@@ -3171,10 +3203,6 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "action_msgs"
-version = "2.0.4"
-
-[[patch.unused]]
 name = "action_tutorials_interfaces"
 version = "0.33.11"
 
@@ -3275,10 +3303,6 @@ name = "test_msgs"
 version = "2.0.4"
 
 [[patch.unused]]
-name = "tf2_msgs"
-version = "0.36.22"
-
-[[patch.unused]]
 name = "theora_image_transport"
 version = "4.0.7"
 
@@ -3293,10 +3317,6 @@ version = "1.8.4"
 [[patch.unused]]
 name = "type_description_interfaces"
 version = "2.0.4"
-
-[[patch.unused]]
-name = "unique_identifier_msgs"
-version = "2.5.1"
 
 [[patch.unused]]
 name = "vision_msgs"
