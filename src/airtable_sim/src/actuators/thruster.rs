@@ -8,16 +8,16 @@ pub enum ThrusterMode {
 #[derive(Debug)]
 pub struct SimThruster {
     name: String,
-    actuator_id: usize,
+    control_id: usize,
     thrust_n: f64,
     mode: ThrusterMode,
 }
 
 impl SimThruster {
-    pub fn new(name: impl Into<String>, actuator_id: usize, thrust_n: f64) -> Self {
+    pub fn new(name: impl Into<String>, control_id: usize, thrust_n: f64) -> Self {
         Self {
             name: name.into(),
-            actuator_id,
+            control_id,
             thrust_n,
             mode: ThrusterMode::Off,
         }
@@ -41,6 +41,6 @@ impl SimThruster {
             }
         };
 
-        ctrl[self.actuator_id] = if enabled { self.thrust_n } else { 0.0 };
+        ctrl[self.control_id] = if enabled { self.thrust_n } else { 0.0 };
     }
 }

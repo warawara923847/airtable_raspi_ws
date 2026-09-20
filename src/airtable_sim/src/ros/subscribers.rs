@@ -1,3 +1,4 @@
+use airtable_interfaces::msg::ReactionWheelCommand;
 use airtable_interfaces::msg::ThrusterPulseCommand;
 
 use crate::simulation::Simulation;
@@ -19,4 +20,39 @@ pub fn handle_thruster_pulse(simulation: &mut Simulation, msg: ThrusterPulseComm
             eprintln!("[sim] error firing thruster {}: {}", name, error);
         }
     }
+}
+
+pub fn create_reaction_wheel_subscription(
+    simulation_worker: &rclrs::Worker<Simulation>,
+    vehicle_name: String,
+) -> Result<rclrs::WorkerSubscription<ReactionWheelCommand, Simulation>, rclrs::RclrsError> {
+    let topic = format!("/{}/actuators/reaction_wheels/command", vehicle_name);
+
+    simulation_worker.create_subscription(
+        topic.as_str(),
+        move |simulation: &mut Simulation, msg: ReactionWheelCommand| {
+            if msg.names.len() != msg.torques.len() {
+                eprintln!(
+                    "[sim] invalid RW command for {}: \
+                        names.len() = {} torques.len() = {}",
+                    vehicle_name,
+                    msg.names.len(),
+                    msg.torques.len(),
+                );
+                return;
+            }
+
+            for (name, torque) in msg.names.iter().zip(msg.torques.iter()) {
+                if let Err(error) =
+                    simulation.set_reaction_wheel_torque(&vehicle_name, name, *torque)
+                {
+                    eprintln!(
+                        "[sim] failed to set RW torque \
+                        {}/{}: {}",
+                        vehicle_name, name, error,
+                    );
+                }
+            }
+        },
+    )
 }

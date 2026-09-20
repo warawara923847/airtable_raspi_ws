@@ -5,10 +5,9 @@ use mujoco_rs::prelude::*;
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::viewer::ViewerSharedState;
 
+use crate::actuators::{ReactionWheelStateData, SimReactionWheel, SimThruster};
+use crate::model::{SimTable, SimVehicle};
 use crate::state::{PlanarState, TablePose};
-use crate::table::SimTable;
-use crate::thruster::SimThruster;
-use crate::vehicle::SimVehicle;
 
 struct ThrusterDefinition {
     name: &'static str,
@@ -16,10 +15,20 @@ struct ThrusterDefinition {
     thrust_n: f64,
 }
 
+struct ReactionWheelDefinition {
+    name: &'static str,
+    actuator_name: &'static str,
+
+    inertia: f64,
+    max_torque: f64,
+    max_angular_velocity: f64,
+}
+
 struct VehicleDefinition {
     name: &'static str,
     body_name: &'static str,
     thrusters: &'static [ThrusterDefinition],
+    reaction_wheels: &'static [ReactionWheelDefinition],
 }
 
 const ROBOT_1_THRUSTERS: &[ThrusterDefinition] = &[
@@ -45,10 +54,20 @@ const ROBOT_1_THRUSTERS: &[ThrusterDefinition] = &[
     },
 ];
 
+const ROBOT_1_REACTION_WHEELS: &[ReactionWheelDefinition] = &[ReactionWheelDefinition {
+    name: "rw_1",
+    actuator_name: "reaction_wheel_1_actuator",
+
+    inertia: 1.0e-3,
+    max_torque: 0.02,
+    max_angular_velocity: 500.0,
+}];
+
 const VEHICLE_DEFINITIONS: &[VehicleDefinition] = &[VehicleDefinition {
     name: "robot_1",
     body_name: "robot_1",
     thrusters: ROBOT_1_THRUSTERS,
+    reaction_wheels: ROBOT_1_REACTION_WHEELS,
 }];
 
 pub struct Simulation {
@@ -176,14 +195,51 @@ impl Simulation {
 
                 let actuator_id = actuator_info.id;
 
+                let control_id = data.model().actuator_ctrladr()[actuator_id] as usize;
+
                 println!(
-                    "[sim] {}/{} -> {} (actuator id={})",
-                    vehicle_def.name, thruster_def.name, thruster_def.actuator_name, actuator_id
+                    "[sim] {}/{} -> {} (actuator id={}, control_id={})",
+                    vehicle_def.name,
+                    thruster_def.name,
+                    thruster_def.actuator_name,
+                    actuator_id,
+                    control_id
                 );
 
                 thrusters.insert(
                     thruster_def.name.to_string(),
-                    SimThruster::new(thruster_def.name, actuator_id, thruster_def.thrust_n),
+                    SimThruster::new(thruster_def.name, control_id, thruster_def.thrust_n),
+                );
+            }
+
+            // ------------------------------------------------
+            // reaction wheels
+            // ------------------------------------------------
+            let mut reaction_wheels = HashMap::new();
+
+            for rw_def in vehicle_def.reaction_wheels {
+                let actuator_info = data.actuator(rw_def.actuator_name).ok_or_else(|| {
+                    format!("MuJoCo actuator not found: {}", rw_def.actuator_name)
+                })?;
+
+                let actuator_id = actuator_info.id;
+
+                let control_id = data.model().actuator_ctrladr()[actuator_id] as usize;
+
+                println!(
+                    "[sim] {}/{} -> {} (actuator id={}, control id={})",
+                    vehicle_def.name, rw_def.name, rw_def.actuator_name, actuator_id, control_id
+                );
+
+                reaction_wheels.insert(
+                    rw_def.name.to_string(),
+                    SimReactionWheel::new(
+                        rw_def.name,
+                        control_id,
+                        rw_def.inertia,
+                        rw_def.max_torque,
+                        rw_def.max_angular_velocity,
+                    ),
                 );
             }
 
@@ -192,7 +248,7 @@ impl Simulation {
             // ------------------------------------------------
             vehicles.insert(
                 vehicle_def.name.to_string(),
-                SimVehicle::new(vehicle_def.name, body_id, thrusters),
+                SimVehicle::new(vehicle_def.name, body_id, thrusters, reaction_wheels),
             );
         }
 
@@ -344,14 +400,66 @@ impl Simulation {
         vehicle.fire_thruster(thruster_name, now, duration_s)
     }
 
+    // ------------------------------------------------
+    // Reaction wheels
+    // ------------------------------------------------
+    pub fn set_reaction_wheel_torque(
+        &mut self,
+        vehicle_name: &str,
+        wheel_name: &str,
+        torque_nm: f64,
+    ) -> Result<(), String> {
+        let vehicle = self
+            .vehicles
+            .get_mut(vehicle_name)
+            .ok_or_else(|| format!("unknown vehicle: {vehicle_name}"))?;
+
+        vehicle.set_reaction_wheel_torque(wheel_name, torque_nm)
+    }
+
+    pub fn reaction_wheel_speed(
+        &self,
+        vehicle_name: &str,
+        wheel_name: &str,
+    ) -> Result<f64, String> {
+        let vehicle = self
+            .vehicles
+            .get(vehicle_name)
+            .ok_or_else(|| format!("unknown vehicle: {vehicle_name}"))?;
+
+        let wheel = vehicle.reaction_wheel(wheel_name)?;
+
+        Ok(wheel.angular_velocity())
+    }
+
+    pub fn reaction_wheel_states(
+        &self,
+        vehicle_name: &str,
+    ) -> Result<Vec<ReactionWheelStateData>, String> {
+        let vehicle = self
+            .vehicles
+            .get(vehicle_name)
+            .ok_or_else(|| format!("unknown vehicle: {vehicle_name}"))?;
+
+        let states = vehicle
+            .reaction_wheels
+            .values()
+            .map(|wheel| wheel.state())
+            .collect();
+
+        Ok(states)
+    }
+
     pub fn step(&mut self) {
         let now = self.data.time();
+        let dt = self.data.model().opt().timestep;
 
         {
             let ctrl = self.data.ctrl_mut();
 
             for vehicle in self.vehicles.values_mut() {
                 vehicle.update_thrusters(now, ctrl);
+                vehicle.update_reaction_wheels(ctrl, dt);
             }
         }
 

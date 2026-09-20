@@ -1,9 +1,8 @@
+mod actuators;
+mod model;
 mod ros;
 mod simulation;
 mod state;
-mod table;
-mod thruster;
-mod vehicle;
 
 use std::{collections::HashMap, time::Duration};
 
@@ -11,12 +10,16 @@ use nav_msgs::msg::Odometry;
 use rclrs::{Context, CreateBasicExecutor, IntoPrimitiveOptions, RclrsErrorFilter, SpinOptions};
 use tf2_msgs::msg::TFMessage;
 
-use crate::ros::publishers::GroundTruthPublisher;
+use crate::ros::publishers::{GroundTruthPublisher, ReactionWheelStatePublisher};
+use crate::ros::subscribers::create_reaction_wheel_subscription;
 use crate::ros::tf::TfPublishers;
 use crate::simulation::Simulation;
+use airtable_interfaces::msg::ReactionWheelState;
 
 struct VehicleRosHandles {
     gt_publisher: GroundTruthPublisher,
+    rw_state_publisher: ReactionWheelStatePublisher,
+
     table_frame: String,
 }
 
@@ -41,10 +44,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ------------------------------------------------
     // Ground Truth publishers
     // ------------------------------------------------
+    let vehicle_names = simulation.vehicle_names();
     let mut vehicle_ros_handles = HashMap::new();
 
-    for vehicle_name in simulation.vehicle_names() {
-        let table_frame = simulation.vehicle_table(&vehicle_name)?.name().to_string();
+    for vehicle_name in &vehicle_names {
+        let table_frame = simulation.vehicle_table(vehicle_name)?.name().to_string();
 
         let topic = format!("/{vehicle_name}/sim/ground_truth");
 
@@ -54,10 +58,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let gt_publisher =
             GroundTruthPublisher::new(publisher, table_frame.clone(), child_frame_id);
+
+        // ------------------------------------------------
+        // Reaction Wheel State
+        // ------------------------------------------------
+        let rw_state_topic = format!("/{vehicle_name}/actuators/reaction_wheels/state");
+
+        let rw_ros_publisher =
+            node.create_publisher::<ReactionWheelState>(rw_state_topic.as_str())?;
+
+        let rw_state_publisher = ReactionWheelStatePublisher::new(rw_ros_publisher);
+
         vehicle_ros_handles.insert(
-            vehicle_name,
+            vehicle_name.clone(),
             VehicleRosHandles {
                 gt_publisher,
+                rw_state_publisher,
                 table_frame,
             },
         );
@@ -86,6 +102,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     println!("[sim] thruster subscription created");
+
+    let mut reaction_wheel_subscriptions = Vec::new();
+
+    for vehicle_name in &vehicle_names {
+        let subscription =
+            create_reaction_wheel_subscription(&simulation_worker, vehicle_name.clone())?;
+
+        reaction_wheel_subscriptions.push(subscription);
+    }
 
     let _simulation_timer = simulation_worker.create_timer_repeating(
         Duration::from_millis(2),
@@ -128,6 +153,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tf_publishers.publish_vehicle(&handles.table_frame, vehicle_name, &state)
                 {
                     eprintln!("[sim] failed to publish TF for {}: {}", vehicle_name, error);
+                }
+
+                // ------------------------------------------------
+                // RW state
+                // ------------------------------------------------
+                let rw_states = match simulation.reaction_wheel_states(vehicle_name) {
+                    Ok(states) => states,
+                    Err(error) => {
+                        eprintln!(
+                            "[sim] failed to get RW states fo {}: {}",
+                            vehicle_name, error
+                        );
+
+                        continue;
+                    }
+                };
+
+                if let Err(error) = handles.rw_state_publisher.publish(state.time, &rw_states) {
+                    eprintln!(
+                        "[sim] failed to publish RW state for {}: {}",
+                        vehicle_name, error
+                    );
                 }
             }
         },

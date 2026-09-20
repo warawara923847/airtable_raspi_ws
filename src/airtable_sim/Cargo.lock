@@ -3215,6 +3215,14 @@ name = "actuator_msgs"
 version = "0.0.1"
 
 [[patch.unused]]
+name = "airtable_hardware"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "airtable_sim"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "composition_interfaces"
 version = "2.0.4"
 

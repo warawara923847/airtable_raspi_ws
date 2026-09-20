@@ -1,6 +1,8 @@
+use airtable_interfaces::msg::ReactionWheelState;
 use nav_msgs::msg::Odometry;
 use rclrs::Publisher;
 
+use crate::actuators::ReactionWheelStateData;
 use crate::state::PlanarState;
 
 pub struct GroundTruthPublisher {
@@ -8,6 +10,10 @@ pub struct GroundTruthPublisher {
 
     frame_id: String,
     child_frame_id: String,
+}
+
+pub struct ReactionWheelStatePublisher {
+    publisher: Publisher<ReactionWheelState>,
 }
 
 impl GroundTruthPublisher {
@@ -73,6 +79,36 @@ impl GroundTruthPublisher {
         msg.twist.twist.angular.x = 0.0;
         msg.twist.twist.angular.y = 0.0;
         msg.twist.twist.angular.z = state.wz;
+
+        self.publisher.publish(msg)?;
+
+        Ok(())
+    }
+}
+
+impl ReactionWheelStatePublisher {
+    pub fn new(publisher: rclrs::Publisher<ReactionWheelState>) -> Self {
+        Self { publisher }
+    }
+
+    pub fn publish(
+        &self,
+        time: f64,
+        states: &[ReactionWheelStateData],
+    ) -> Result<(), rclrs::RclrsError> {
+        let mut msg = ReactionWheelState::default();
+
+        let (sec, nanosec) = simulation_time_to_ros_time(time);
+
+        msg.stamp.sec = sec;
+        msg.stamp.nanosec = nanosec;
+
+        for state in states {
+            msg.names.push(state.name.clone());
+            msg.angular_velocities.push(state.angular_velocity);
+            msg.commanded_torques.push(state.commanded_torque);
+            msg.applied_torques.push(state.applied_torque);
+        }
 
         self.publisher.publish(msg)?;
 
