@@ -33,6 +33,7 @@ def generate_launch_description():
     controller_node = Node(
         package="airtable_controller",
         executable="airtable_controller_node",
+        namespace="robot_1",
         name="airtable_controller",
         output="screen",
         parameters=[controller_params],

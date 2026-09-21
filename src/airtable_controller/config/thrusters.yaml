@@ -1,23 +1,41 @@
-airtable_controller:
-  ros__parameters:
-    thrusters.names: ["thruster_1", "thruster_2", "thruster_3", "thruster_4"]
+/**:
+  ros__parameters: 
+    thrusters:
+      names: ["thruster_1", "thruster_2", "thruster_3", "thruster_4"]
 
-    thrusters.thruster_1.position: [0.1, 0.1]
-    thrusters.thruster_1.direction: [1.0, -1.0]
-    thrusters.thruster_1.min_thrust_n: 0.0
-    thrusters.thruster_1.max_thrust_n: 0.5
+      thruster_1:
+        position: [0.1, 0.1]
+        direction: [1.0, -1.0]
+        min_thrust_n: 0.0
+        max_thrust_n: 0.5
 
-    thrusters.thruster_2.position: [0.1, -0.1]
-    thrusters.thruster_2.direction: [1.0, 1.0]
-    thrusters.thruster_2.min_thrust_n: 0.0
-    thrusters.thruster_2.max_thrust_n: 0.5
+      thruster_2:
+        position: [0.1, -0.1]
+        direction: [1.0, 1.0]
+        min_thrust_n: 0.0
+        max_thrust_n: 0.5
 
-    thrusters.thruster_3.position: [-0.1, 0.1]
-    thrusters.thruster_3.direction: [-1.0, -1.0]
-    thrusters.thruster_3.min_thrust_n: 0.0
-    thrusters.thruster_3.max_thrust_n: 0.5
+      thruster_3:
+        position: [-0.1, 0.1]
+        direction: [-1.0, -1.0]
+        min_thrust_n: 0.0
+        max_thrust_n: 0.5
 
-    thrusters.thruster_4.position: [-0.1, -0.1]
-    thrusters.thruster_4.direction: [-1.0, 1.0]
-    thrusters.thruster_4.min_thrust_n: 0.0
-    thrusters.thruster_4.max_thrust_n: 0.5
+      thruster_4:
+        position: [-0.1, -0.1]
+        direction: [-1.0, 1.0]
+        min_thrust_n: 0.0
+        max_thrust_n: 0.5
+
+    reaction_wheels:
+      names: ["rw_1"]
+
+      rw_1:
+        speed_kp: 0.5
+        max_torque_nm: 0.01
+        max_speed_rad_s: 100.0
+
+    manual:
+      reaction_wheel:
+        name: "rw_1"
+        speed_step_rad_s: 25.0

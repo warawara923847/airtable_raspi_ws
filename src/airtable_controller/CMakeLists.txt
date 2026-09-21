@@ -18,6 +18,7 @@ add_executable(
     src/controller_node.cpp
     src/control_allocator.cpp
     src/manual_mixer.cpp
+    src/reaction_wheel_controller.cpp
 )
 
 target_include_directories(

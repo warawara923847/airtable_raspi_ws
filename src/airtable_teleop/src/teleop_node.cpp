@@ -30,16 +30,22 @@ public:
         button_right_ =
             this->declare_parameter<int>("button_right", 14);
 
-        button_rotate_ccw_ =
+        button_thruster_rotate_ccw_ =
             this->declare_parameter<int>("button_rotate_ccw", 9);
 
-        button_rotate_cw_ =
+        button_thruster_rotate_cw_ =
             this->declare_parameter<int>("button_rotate_cw", 10);
+
+        button_rw_rotate_ccw_ =
+            this->declare_parameter<int>("button_rw_rotate_ccw", 0);
+
+        button_rw_rotate_cw_ =
+            this->declare_parameter<int>("button_rw_rotate_cw", 1); 
 
         publisher_ =
             this->create_publisher<
                 airtable_interfaces::msg::ManualMotionCommand>(
-                    "/commands/manual/motion",
+                    "commands/manual/motion",
                     10);
 
         subscription_ =
@@ -83,14 +89,24 @@ private:
                 airtable_interfaces::msg::ManualMotionCommand::RIGHT);
         }
 
-        if (rising_edge(msg, button_rotate_ccw_)) {
+        if (rising_edge(msg, button_thruster_rotate_ccw_)) {
             publish_command(
-                airtable_interfaces::msg::ManualMotionCommand::ROTATE_CCW);
+                airtable_interfaces::msg::ManualMotionCommand::THRUSTER_ROTATE_CCW);
         }
 
-        if (rising_edge(msg, button_rotate_cw_)) {
+        if (rising_edge(msg, button_thruster_rotate_cw_)) {
             publish_command(
-                airtable_interfaces::msg::ManualMotionCommand::ROTATE_CW);
+                airtable_interfaces::msg::ManualMotionCommand::THRUSTER_ROTATE_CW);
+        }
+
+        if (rising_edge(msg, button_rw_rotate_ccw_)) {
+            publish_command(
+                airtable_interfaces::msg::ManualMotionCommand::RW_ROTATE_CCW);
+        }
+
+        if (rising_edge(msg, button_rw_rotate_cw_)) {
+            publish_command(
+                airtable_interfaces::msg::ManualMotionCommand::RW_ROTATE_CW);
         }
 
         previous_buttons_ = msg->buttons;
@@ -151,8 +167,10 @@ private:
     int button_down_;
     int button_left_;
     int button_right_;
-    int button_rotate_ccw_;
-    int button_rotate_cw_;
+    int button_thruster_rotate_ccw_;
+    int button_thruster_rotate_cw_;
+    int button_rw_rotate_ccw_;
+    int button_rw_rotate_cw_;
 
     rclcpp::Publisher<
         airtable_interfaces::msg::ManualMotionCommand>::SharedPtr publisher_;

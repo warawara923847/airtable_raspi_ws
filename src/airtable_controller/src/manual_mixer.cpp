@@ -34,13 +34,13 @@ namespace airtable_controller
                     "thruster_2",
                 };
 
-            case Command::ROTATE_CCW:
+            case Command::THRUSTER_ROTATE_CCW:
                 return {
                     "thruster_2",
                     "thruster_4",
                 };
 
-            case Command::ROTATE_CW:
+            case Command::THRUSTER_ROTATE_CW:
                 return {
                     "thruster_1",
                     "thruster_3",
