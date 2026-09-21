@@ -69,10 +69,12 @@ name = "airtable_sim"
 version = "0.1.0"
 dependencies = [
  "airtable_interfaces",
+ "builtin_interfaces",
  "geometry_msgs",
  "mujoco-rs",
  "nav_msgs",
  "rclrs",
+ "sensor_msgs",
  "tf2_msgs",
 ]
 
@@ -2218,6 +2220,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
 
 [[package]]
+name = "sensor_msgs"
+version = "5.3.8"
+dependencies = [
+ "builtin_interfaces",
+ "geometry_msgs",
+ "rosidl_runtime_rs",
+ "service_msgs",
+ "std_msgs",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3215,14 +3228,6 @@ name = "actuator_msgs"
 version = "0.0.1"
 
 [[patch.unused]]
-name = "airtable_hardware"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "airtable_sim"
-version = "0.1.0"
-
-[[patch.unused]]
 name = "composition_interfaces"
 version = "2.0.4"
 
@@ -3281,10 +3286,6 @@ version = "0.26.11"
 [[patch.unused]]
 name = "rosgraph_msgs"
 version = "2.0.4"
-
-[[patch.unused]]
-name = "sensor_msgs"
-version = "5.3.8"
 
 [[patch.unused]]
 name = "shape_msgs"

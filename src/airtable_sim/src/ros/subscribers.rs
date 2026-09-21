@@ -22,6 +22,39 @@ pub fn handle_thruster_pulse(simulation: &mut Simulation, msg: ThrusterPulseComm
     }
 }
 
+pub fn create_thruster_subscription(
+    simulation_worker: &rclrs::Worker<Simulation>,
+    vehicle_name: String,
+) -> Result<rclrs::WorkerSubscription<ThrusterPulseCommand, Simulation>, rclrs::RclrsError> {
+    let topic = format!("/{vehicle_name}/actuators/thrusters/pulse");
+
+    simulation_worker.create_subscription(
+        topic.as_str(),
+        move |simulation: &mut Simulation, msg: ThrusterPulseCommand| {
+            if msg.pulse_duration.sec < 0 {
+                eprintln!("[sim] negative pulse duration: {}", msg.pulse_duration.sec);
+                return;
+            }
+
+            let duration_s =
+                msg.pulse_duration.sec as f64 + msg.pulse_duration.nanosec as f64 * 1e-9;
+
+            if duration_s <= 0.0 {
+                return;
+            }
+
+            for name in &msg.names {
+                if let Err(error) = simulation.fire_thruster(&vehicle_name, name, duration_s) {
+                    eprintln!(
+                        "[sim] error firing thruster {}/{}: {}",
+                        vehicle_name, name, error,
+                    );
+                }
+            }
+        },
+    )
+}
+
 pub fn create_reaction_wheel_subscription(
     simulation_worker: &rclrs::Worker<Simulation>,
     vehicle_name: String,

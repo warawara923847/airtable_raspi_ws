@@ -7,6 +7,7 @@ use mujoco_rs::viewer::ViewerSharedState;
 
 use crate::actuators::{ReactionWheelStateData, SimReactionWheel, SimThruster};
 use crate::model::{SimTable, SimVehicle};
+use crate::sensors::{ImuState, SimImu};
 use crate::state::{PlanarState, TablePose};
 
 struct ThrusterDefinition {
@@ -24,11 +25,19 @@ struct ReactionWheelDefinition {
     max_angular_velocity: f64,
 }
 
+struct ImuDefinition {
+    name: &'static str,
+    accel_sensor_name: &'static str,
+    gyro_sensor_name: &'static str,
+    orientation_sensor_name: &'static str,
+}
+
 struct VehicleDefinition {
     name: &'static str,
     body_name: &'static str,
     thrusters: &'static [ThrusterDefinition],
     reaction_wheels: &'static [ReactionWheelDefinition],
+    imus: &'static [ImuDefinition],
 }
 
 const ROBOT_1_THRUSTERS: &[ThrusterDefinition] = &[
@@ -63,11 +72,19 @@ const ROBOT_1_REACTION_WHEELS: &[ReactionWheelDefinition] = &[ReactionWheelDefin
     max_angular_velocity: 500.0,
 }];
 
+const ROBOT_1_IMUS: &[ImuDefinition] = &[ImuDefinition {
+    name: "imu_1",
+    accel_sensor_name: "imu_1_accel",
+    gyro_sensor_name: "imu_1_gyro",
+    orientation_sensor_name: "imu_1_orientation",
+}];
+
 const VEHICLE_DEFINITIONS: &[VehicleDefinition] = &[VehicleDefinition {
     name: "robot_1",
     body_name: "robot_1",
     thrusters: ROBOT_1_THRUSTERS,
     reaction_wheels: ROBOT_1_REACTION_WHEELS,
+    imus: ROBOT_1_IMUS,
 }];
 
 pub struct Simulation {
@@ -243,12 +260,45 @@ impl Simulation {
                 );
             }
 
+            // -------------------------------------------------
+            // IMUs
+            // -------------------------------------------------
+            let mut imus = HashMap::new();
+
+            for imu_def in vehicle_def.imus {
+                let accel_info = data.sensor(imu_def.accel_sensor_name).ok_or_else(|| {
+                    format!("MuJoCo sensor not found: {}", imu_def.accel_sensor_name)
+                })?;
+
+                let gyro_info = data.sensor(imu_def.gyro_sensor_name).ok_or_else(|| {
+                    format!("MuJoCo sensor not found: {}", imu_def.gyro_sensor_name)
+                })?;
+
+                let orientation_info =
+                    data.sensor(imu_def.orientation_sensor_name)
+                        .ok_or_else(|| {
+                            format!(
+                                "MuJoCo sensor not found: {}",
+                                imu_def.orientation_sensor_name
+                            )
+                        })?;
+
+                imus.insert(
+                    imu_def.name.to_string(),
+                    SimImu::new(
+                        imu_def.name,
+                        accel_info.id,
+                        gyro_info.id,
+                        orientation_info.id,
+                    ),
+                );
+            }
             // ------------------------------------------------
             // Vehicle
             // ------------------------------------------------
             vehicles.insert(
                 vehicle_def.name.to_string(),
-                SimVehicle::new(vehicle_def.name, body_id, thrusters, reaction_wheels),
+                SimVehicle::new(vehicle_def.name, body_id, thrusters, reaction_wheels, imus),
             );
         }
 
@@ -441,13 +491,44 @@ impl Simulation {
             .get(vehicle_name)
             .ok_or_else(|| format!("unknown vehicle: {vehicle_name}"))?;
 
-        let states = vehicle
+        let mut states: Vec<_> = vehicle
             .reaction_wheels
             .values()
             .map(|wheel| wheel.state())
             .collect();
 
+        states.sort_by(|a, b| a.name.cmp(&b.name));
+
         Ok(states)
+    }
+
+    // ------------------------------------------------
+    // IMUs
+    // ------------------------------------------------
+    pub fn imu_states(&self, vehicle_name: &str) -> Result<Vec<ImuState>, String> {
+        let vehicle = self
+            .vehicles
+            .get(vehicle_name)
+            .ok_or_else(|| format!("unknown vehicle: {vehicle_name}"))?;
+
+        let mut states: Vec<ImuState> = vehicle
+            .imus
+            .values()
+            .map(|imu| imu.read(&self.data))
+            .collect();
+
+        states.sort_by(|a, b| a.name.cmp(&b.name));
+
+        Ok(states)
+    }
+
+    pub fn imu_names(&self, vehicle_name: &str) -> Result<Vec<String>, String> {
+        let vehicle = self
+            .vehicles
+            .get(vehicle_name)
+            .ok_or_else(|| format!("unknown vehicle: {vehicle_name}"))?;
+
+        Ok(vehicle.imus.keys().cloned().collect())
     }
 
     pub fn step(&mut self) {

@@ -1,27 +1,19 @@
 mod actuators;
 mod model;
 mod ros;
+mod sensors;
 mod simulation;
 mod state;
 
 use std::{collections::HashMap, time::Duration};
 
-use nav_msgs::msg::Odometry;
 use rclrs::{Context, CreateBasicExecutor, IntoPrimitiveOptions, RclrsErrorFilter, SpinOptions};
 use tf2_msgs::msg::TFMessage;
 
-use crate::ros::publishers::{GroundTruthPublisher, ReactionWheelStatePublisher};
-use crate::ros::subscribers::create_reaction_wheel_subscription;
+use crate::ros::publishers::VehicleRosHandles;
+use crate::ros::subscribers::{create_reaction_wheel_subscription, create_thruster_subscription};
 use crate::ros::tf::TfPublishers;
 use crate::simulation::Simulation;
-use airtable_interfaces::msg::ReactionWheelState;
-
-struct VehicleRosHandles {
-    gt_publisher: GroundTruthPublisher,
-    rw_state_publisher: ReactionWheelStatePublisher,
-
-    table_frame: String,
-}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     //
@@ -50,33 +42,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for vehicle_name in &vehicle_names {
         let table_frame = simulation.vehicle_table(vehicle_name)?.name().to_string();
 
-        let topic = format!("/{vehicle_name}/sim/ground_truth");
+        let imu_names = simulation.imu_names(vehicle_name)?;
 
-        let child_frame_id = format!("{vehicle_name}/base_link");
+        let handles = VehicleRosHandles::new(&node, vehicle_name, table_frame, imu_names)?;
 
-        let publisher = node.create_publisher::<Odometry>(topic.as_str())?;
-
-        let gt_publisher =
-            GroundTruthPublisher::new(publisher, table_frame.clone(), child_frame_id);
-
-        // ------------------------------------------------
-        // Reaction Wheel State
-        // ------------------------------------------------
-        let rw_state_topic = format!("/{vehicle_name}/actuators/reaction_wheels/state");
-
-        let rw_ros_publisher =
-            node.create_publisher::<ReactionWheelState>(rw_state_topic.as_str())?;
-
-        let rw_state_publisher = ReactionWheelStatePublisher::new(rw_ros_publisher);
-
-        vehicle_ros_handles.insert(
-            vehicle_name.clone(),
-            VehicleRosHandles {
-                gt_publisher,
-                rw_state_publisher,
-                table_frame,
-            },
-        );
+        vehicle_ros_handles.insert(vehicle_name.clone(), handles);
     }
 
     // ------------------------------------------------
@@ -96,20 +66,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let simulation_worker = node.create_worker(simulation);
 
-    let _thruster_pulse_subscription = simulation_worker.create_subscription(
-        "actuators/thrusters/pulse",
-        ros::subscribers::handle_thruster_pulse,
-    )?;
-
-    println!("[sim] thruster subscription created");
-
+    let mut thruster_subscriptions = Vec::new();
     let mut reaction_wheel_subscriptions = Vec::new();
 
     for vehicle_name in &vehicle_names {
-        let subscription =
-            create_reaction_wheel_subscription(&simulation_worker, vehicle_name.clone())?;
+        let thruster_subscription =
+            create_thruster_subscription(&simulation_worker, vehicle_name.clone())?;
+        thruster_subscriptions.push(thruster_subscription);
 
-        reaction_wheel_subscriptions.push(subscription);
+        println!("[sim] created thruster subscription for {}", vehicle_name);
+
+        let reaction_wheel_subscription =
+            create_reaction_wheel_subscription(&simulation_worker, vehicle_name.clone())?;
+        reaction_wheel_subscriptions.push(reaction_wheel_subscription);
+
+        println!(
+            "[sim] created reaction wheel subscription for {}",
+            vehicle_name
+        );
     }
 
     let _simulation_timer = simulation_worker.create_timer_repeating(
@@ -175,6 +149,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         "[sim] failed to publish RW state for {}: {}",
                         vehicle_name, error
                     );
+                }
+
+                // ------------------------------------------------
+                // IMU state
+                // ------------------------------------------------
+                let imu_states = match simulation.imu_states(vehicle_name) {
+                    Ok(states) => states,
+                    Err(error) => {
+                        eprintln!(
+                            "[sim] failed to get IMU states for {}: {}",
+                            vehicle_name, error
+                        );
+
+                        continue;
+                    }
+                };
+
+                for imu_state in &imu_states {
+                    let Some(publisher) = handles.imu_publishers.get(imu_state.name.as_str())
+                    else {
+                        eprintln!(
+                            "[sim] no IMU publisher for {}/{}",
+                            vehicle_name, imu_state.name
+                        );
+                        continue;
+                    };
+
+                    if let Err(error) = publisher.publish(state.time, imu_state) {
+                        eprintln!(
+                            "[sim] failed to publish IMU state for {}/{}: {}",
+                            vehicle_name, imu_state.name, error
+                        );
+                    }
                 }
             }
         },

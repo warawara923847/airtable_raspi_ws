@@ -174,7 +174,18 @@
                     size="0.03 0.01"
                     rgba="0.8 0.8 0.2 1"
                 />
+
+                <!-- sensor -->
+                <site
+                    name="imu_1"
+                    type="box"
+                    pos="0.06 0 0.02"
+                    size="0.04 0.04 0.02"
+                    euler="0 0 0"
+                />
+                    
             </body>
+
         </body>
 
         <!-- 複数テーブルの場合
@@ -230,4 +241,22 @@
                 gear="0 0 0 0 0 -1"
             />
         </actuator>
+
+        <sensor>
+            <accelerometer
+                name="imu_1_accel"
+                site="imu_1"
+            />
+
+            <gyro
+                name="imu_1_gyro"
+                site="imu_1"
+            />
+
+            <framequat
+                name="imu_1_orientation"
+                objtype="site"
+                objname="imu_1"
+            />
+        </sensor>
 </mujoco>

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::actuators::{SimReactionWheel, SimThruster};
+use crate::sensors::SimImu;
 
 #[derive(Debug)]
 pub struct SimVehicle {
@@ -9,6 +10,7 @@ pub struct SimVehicle {
 
     pub thrusters: HashMap<String, SimThruster>,
     pub reaction_wheels: HashMap<String, SimReactionWheel>,
+    pub imus: HashMap<String, SimImu>,
 }
 
 impl SimVehicle {
@@ -17,12 +19,14 @@ impl SimVehicle {
         body_id: usize,
         thrusters: HashMap<String, SimThruster>,
         reaction_wheels: HashMap<String, SimReactionWheel>,
+        imus: HashMap<String, SimImu>,
     ) -> Self {
         Self {
             name: name.into(),
             body_id,
             thrusters,
             reaction_wheels,
+            imus,
         }
     }
 

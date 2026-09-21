@@ -1,9 +1,21 @@
 use airtable_interfaces::msg::ReactionWheelState;
 use nav_msgs::msg::Odometry;
-use rclrs::Publisher;
+use rclrs::{IntoPrimitiveOptions, Node, Publisher};
+use sensor_msgs::msg::Imu;
+use std::collections::HashMap;
 
 use crate::actuators::ReactionWheelStateData;
+use crate::ros::conversions::sim_time_to_ros_time;
+use crate::sensors::ImuState;
 use crate::state::PlanarState;
+
+pub struct VehicleRosHandles {
+    pub(crate) gt_publisher: GroundTruthPublisher,
+    pub(crate) rw_state_publisher: ReactionWheelStatePublisher,
+    pub(crate) imu_publishers: HashMap<String, ImuPublisher>,
+
+    pub(crate) table_frame: String,
+}
 
 pub struct GroundTruthPublisher {
     publisher: Publisher<Odometry>,
@@ -14,6 +26,57 @@ pub struct GroundTruthPublisher {
 
 pub struct ReactionWheelStatePublisher {
     publisher: Publisher<ReactionWheelState>,
+}
+
+pub struct ImuPublisher {
+    publisher: Publisher<Imu>,
+    frame_id: String,
+}
+
+impl VehicleRosHandles {
+    pub fn new(
+        node: &Node,
+        vehicle_name: &str,
+        table_frame: String,
+        imu_names: Vec<String>,
+    ) -> Result<Self, rclrs::RclrsError> {
+        // GT publisher
+        let gt_topic = format!("/{vehicle_name}/sim/ground_truth");
+        let gt_ros_publisher = node.create_publisher::<Odometry>(gt_topic.as_str())?;
+
+        let gt_publisher = GroundTruthPublisher::new(
+            gt_ros_publisher,
+            table_frame.clone(),
+            format!("{vehicle_name}/base_link"),
+        );
+
+        // RW state publisher
+        let rw_state_topic = format!("/{vehicle_name}/actuators/reaction_wheels/state");
+        let rw_ros_publisher =
+            node.create_publisher::<ReactionWheelState>(rw_state_topic.as_str())?;
+        let rw_state_publisher = ReactionWheelStatePublisher::new(rw_ros_publisher);
+
+        // IMU publishers
+        let mut imu_publishers = HashMap::new();
+
+        for imu_name in imu_names {
+            let topic = format!("/{vehicle_name}/{imu_name}");
+
+            let ros_publisher = node.create_publisher::<Imu>(topic.as_str().sensor_data_qos())?;
+
+            let imu_publisher =
+                ImuPublisher::new(ros_publisher, format!("{vehicle_name}/{imu_name}"));
+
+            imu_publishers.insert(imu_name, imu_publisher);
+        }
+
+        Ok(Self {
+            gt_publisher,
+            rw_state_publisher,
+            imu_publishers,
+            table_frame,
+        })
+    }
 }
 
 impl GroundTruthPublisher {
@@ -113,6 +176,37 @@ impl ReactionWheelStatePublisher {
         self.publisher.publish(msg)?;
 
         Ok(())
+    }
+}
+
+impl ImuPublisher {
+    pub fn new(publisher: rclrs::Publisher<Imu>, frame_id: impl Into<String>) -> Self {
+        Self {
+            publisher: publisher,
+            frame_id: frame_id.into(),
+        }
+    }
+
+    pub fn publish(&self, time: f64, state: &ImuState) -> Result<(), rclrs::RclrsError> {
+        let mut msg = Imu::default();
+
+        msg.header.stamp = sim_time_to_ros_time(time);
+        msg.header.frame_id = self.frame_id.clone();
+
+        msg.orientation.x = state.orientation_wxyz[1];
+        msg.orientation.y = state.orientation_wxyz[2];
+        msg.orientation.z = state.orientation_wxyz[3];
+        msg.orientation.w = state.orientation_wxyz[0];
+
+        msg.angular_velocity.x = state.angular_velocity[0];
+        msg.angular_velocity.y = state.angular_velocity[1];
+        msg.angular_velocity.z = state.angular_velocity[2];
+
+        msg.linear_acceleration.x = state.linear_acceleration[0];
+        msg.linear_acceleration.y = state.linear_acceleration[1];
+        msg.linear_acceleration.z = state.linear_acceleration[2];
+
+        self.publisher.publish(msg)
     }
 }
 
