@@ -114,7 +114,7 @@ impl GroundTruthPublisher {
         // ------------------------------------------------
         msg.pose.pose.position.x = state.x;
         msg.pose.pose.position.y = state.y;
-        msg.pose.pose.position.z = 0.0;
+        msg.pose.pose.position.z = state.z;
 
         let half_yaw = state.yaw * 0.5;
 

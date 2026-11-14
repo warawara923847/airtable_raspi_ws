@@ -1,0 +1,17 @@
+/**:
+  ros__parameters:
+    camera_frame: sim_camera_infra1_optical_frame
+    table_frame: table_1
+    fixed_marker_ids: [10, 11, 12, 13]
+    moving_marker_id: 50
+    # Centers of the printed top faces in airtable_sim/mujoco/airtable.xml [m].
+    fixed_marker_positions: [0.12, 0.12, 0.002,
+                            0.88, 0.12, 0.002,
+                            0.12, 1.88, 0.002,
+                            0.88, 1.88, 0.002]
+    base_to_marker_translation: [0.0, 0.0, 0.147]
+    base_to_marker_rpy: [0.0, 0.0, 0.0]
+    base_height: 0.01
+    calibration_max_time_span: 0.15
+    calibration_max_residual: 0.02
+    pose_covariance_diagonal: [0.001, 0.001, 1000000.0, 1000000.0, 1000000.0, 0.01]

@@ -6,6 +6,9 @@ target/
 .cargo/
 
 .venv/
+__pycache__/
+*.py[cod]
+MUJOCO_LOG.TXT
 
 *.bag
 *.db3

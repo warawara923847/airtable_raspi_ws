@@ -1,0 +1,22 @@
+/**:
+  ros__parameters:
+    camera_frame: camera_infra1_optical_frame
+    table_frame: table_1
+    fixed_marker_ids: [10, 11, 12, 13]
+    moving_marker_id: 50
+    # Example layout in table_1 [m], XYZ for each ID in the order above.
+    # Replace with measured marker CENTERS, not the table's outer dimensions.
+    fixed_marker_positions: [0.0, 0.0, 0.0,
+                             1.0, 0.0, 0.0,
+                             0.0, 2.0, 0.0,
+                             1.0, 2.0, 0.0]
+    # T_base_marker: marker origin and orientation expressed in base_link.
+    # RPY in radians; use the marker frame convention reported by aruco_ros.
+    base_to_marker_translation: [0.0, 0.0, 0.147]
+    base_to_marker_rpy: [0.0, 0.0, 0.0]
+    # Planar base_link height in the table frame, not the marker height.
+    base_height: 0.0
+    calibration_max_time_span: 0.1   # seconds, between fixed observations
+    calibration_max_residual: 0.02  # meters, maximum registration error
+    # Variances in table frame: x/y/z [m^2], roll/pitch/yaw [rad^2]. Tune on hardware.
+    pose_covariance_diagonal: [0.001, 0.001, 1000000.0, 1000000.0, 1000000.0, 0.01]

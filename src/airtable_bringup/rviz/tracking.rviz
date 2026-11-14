@@ -1,0 +1,143 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /ArUco Pose (green)1
+        - /Camera Image1
+      Splitter Ratio: 0.5
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Enabled: true
+  Global Options:
+    Background Color: 35; 35; 40
+    Fixed Frame: table_1
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Table Grid (0.1 m)
+      Enabled: true
+      Value: true
+      Cell Size: 0.1
+      Plane Cell Count: 20
+      Plane: XY
+      Color: 130; 130; 140
+      Alpha: 0.5
+      Offset:
+        X: 0.5
+        Y: 1
+        Z: 0
+      Reference Frame: <Fixed Frame>
+    - Class: rviz_default_plugins/PoseWithCovariance
+      Name: ArUco Pose (green)
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /robot_1/measurements/external_pose
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Depth: 5
+      Shape: Arrow
+      Color: 40; 230; 100
+      Alpha: 1
+      Shaft Length: 0.20
+      Shaft Radius: 0.012
+      Head Length: 0.06
+      Head Radius: 0.035
+      Covariance:
+        Value: false
+    - Class: rviz_default_plugins/Odometry
+      Name: Ground Truth (blue)
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /robot_1/sim/ground_truth
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Depth: 5
+      Keep: 1
+      Position Tolerance: 0.001
+      Angle Tolerance: 0.01
+      Shape:
+        Value: Arrow
+        Color: 70; 150; 255
+        Alpha: 1
+        Shaft Length: 0.32
+        Shaft Radius: 0.006
+        Head Length: 0.04
+        Head Radius: 0.02
+      Covariance:
+        Value: false
+    - Class: rviz_default_plugins/Axes
+      Name: Camera Position and Orientation
+      Enabled: true
+      Value: true
+      Reference Frame: sim_camera_infra1_optical_frame
+      Length: 0.25
+      Radius: 0.012
+    - Class: rviz_default_plugins/TF
+      Name: Frame Names
+      Enabled: true
+      Value: true
+      Show Names: true
+      Show Axes: false
+      Show Arrows: false
+      Marker Scale: 0.3
+      Frame Timeout: 15
+      Frames:
+        All Enabled: false
+        table_1:
+          Value: true
+        sim_camera_infra1_optical_frame:
+          Value: true
+        robot_1/base_link:
+          Value: true
+    - Class: rviz_default_plugins/Image
+      Name: Camera Image
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /sim/camera/infra1/image_rect_raw
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Depth: 2
+      Normalize Range: true
+      Min Value: 0
+      Max Value: 1
+      Median window: 5
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 4.5
+      Focal Point:
+        X: 0.5
+        Y: 1
+        Z: 0.9
+      Near Clip Distance: 0.01
+      Pitch: 0.6
+      Yaw: 0.8
+      Target Frame: <Fixed Frame>
+    Saved: ~
+Window Geometry:
+  Width: 1400
+  Height: 900
+  X: 60
+  Y: 40
+  Hide Left Dock: false
+  Hide Right Dock: false

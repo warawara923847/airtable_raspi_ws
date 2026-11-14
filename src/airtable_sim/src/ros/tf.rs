@@ -17,8 +17,13 @@ impl TfPublishers {
         }
     }
 
-    pub fn publish_static_tables(&self, tables: &[TablePose]) -> Result<(), rclrs::RclrsError> {
-        let transforms = tables.iter().map(table_pose_to_transform).collect();
+    pub fn publish_static_frames(
+        &self,
+        tables: &[TablePose],
+        camera: Option<TransformStamped>,
+    ) -> Result<(), rclrs::RclrsError> {
+        let mut transforms: Vec<_> = tables.iter().map(table_pose_to_transform).collect();
+        transforms.extend(camera);
 
         let msg = TFMessage { transforms };
 
@@ -46,7 +51,7 @@ impl TfPublishers {
 
         tf.transform.translation.x = state.x;
         tf.transform.translation.y = state.y;
-        tf.transform.translation.z = 0.0;
+        tf.transform.translation.z = state.z;
 
         let half_yaw = state.yaw * 0.5;
 

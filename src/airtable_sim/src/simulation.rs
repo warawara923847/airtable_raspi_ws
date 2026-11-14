@@ -368,6 +368,7 @@ impl Simulation {
             time: self.data.time(),
             x,
             y,
+            z: robot_pos[2] - table_pos[2],
             yaw,
             vx,
             vy,
@@ -545,6 +546,8 @@ impl Simulation {
         }
 
         self.data.step();
+        // mj_step integrates qpos/time last; refresh derived poses and sensors at that time.
+        self.data.forward();
     }
 
     pub fn qpos(&self) -> &[f64] {

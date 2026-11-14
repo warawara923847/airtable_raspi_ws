@@ -11,10 +11,12 @@ tf2_msgs = "*"
 geometry_msgs = "*"
 sensor_msgs = "*"
 builtin_interfaces = "*"
+rosgraph_msgs = "*"
 
 [dependencies.mujoco-rs]
 version = "6.0.1"
 features = [
     "auto-download-mujoco",
     "viewer-ui",
+    "renderer",
 ] 

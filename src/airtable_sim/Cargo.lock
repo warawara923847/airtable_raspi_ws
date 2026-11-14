@@ -74,6 +74,7 @@ dependencies = [
  "mujoco-rs",
  "nav_msgs",
  "rclrs",
+ "rosgraph_msgs",
  "sensor_msgs",
  "tf2_msgs",
 ]
@@ -2011,6 +2012,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
 
 [[package]]
+name = "rcl_interfaces"
+version = "2.0.4"
+dependencies = [
+ "builtin_interfaces",
+ "rosidl_runtime_rs",
+ "service_msgs",
+]
+
+[[package]]
 name = "rclrs"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2080,6 +2090,16 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "rosgraph_msgs"
+version = "2.0.4"
+dependencies = [
+ "builtin_interfaces",
+ "rcl_interfaces",
+ "rosidl_runtime_rs",
+ "service_msgs",
 ]
 
 [[package]]
@@ -2426,7 +2446,7 @@ dependencies = [
 
 [[package]]
 name = "tf2_msgs"
-version = "0.36.22"
+version = "0.36.23"
 dependencies = [
  "action_msgs",
  "builtin_interfaces",
@@ -3228,8 +3248,28 @@ name = "actuator_msgs"
 version = "0.0.1"
 
 [[patch.unused]]
+name = "airtable_hardware"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "airtable_sim"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "aruco_msgs"
+version = "5.0.5"
+
+[[patch.unused]]
 name = "composition_interfaces"
 version = "2.0.4"
+
+[[patch.unused]]
+name = "control_msgs"
+version = "5.10.0"
+
+[[patch.unused]]
+name = "controller_manager_msgs"
+version = "4.48.1"
 
 [[patch.unused]]
 name = "diagnostic_msgs"
@@ -3238,6 +3278,10 @@ version = "5.3.8"
 [[patch.unused]]
 name = "example_interfaces"
 version = "0.12.1"
+
+[[patch.unused]]
+name = "geographic_msgs"
+version = "1.0.6"
 
 [[patch.unused]]
 name = "gps_msgs"
@@ -3260,6 +3304,22 @@ name = "marine_acoustic_msgs"
 version = "2.1.0"
 
 [[patch.unused]]
+name = "moveit_msgs"
+version = "2.6.0"
+
+[[patch.unused]]
+name = "object_recognition_msgs"
+version = "2.0.0"
+
+[[patch.unused]]
+name = "octomap_msgs"
+version = "2.0.1"
+
+[[patch.unused]]
+name = "pal_statistics_msgs"
+version = "2.8.2"
+
+[[patch.unused]]
 name = "pcl_msgs"
 version = "1.0.0"
 
@@ -3268,12 +3328,16 @@ name = "pendulum_msgs"
 version = "0.33.11"
 
 [[patch.unused]]
-name = "rcl_interfaces"
-version = "2.0.4"
+name = "realsense2_camera_msgs"
+version = "4.58.4"
 
 [[patch.unused]]
 name = "rmw_dds_common"
 version = "3.1.1"
+
+[[patch.unused]]
+name = "robot_localization"
+version = "3.8.3"
 
 [[patch.unused]]
 name = "ros_gz_interfaces"
@@ -3282,10 +3346,6 @@ version = "1.0.24"
 [[patch.unused]]
 name = "rosbag2_interfaces"
 version = "0.26.11"
-
-[[patch.unused]]
-name = "rosgraph_msgs"
-version = "2.0.4"
 
 [[patch.unused]]
 name = "shape_msgs"
