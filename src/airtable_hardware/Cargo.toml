@@ -9,3 +9,4 @@ rclrs = "0.7"
 airtable_interfaces = { path = "../../install/airtable_interfaces/share/airtable_interfaces/rust" }
 sensor_msgs = "*"
 trajectory_msgs = "*"
+signal-hook = "0.3"

@@ -1,0 +1,16 @@
+/**:
+  ros__parameters:
+    rw:
+      enabled: true
+      backend: dummy
+      name: rw_1
+      # sysfs backend requires an exported, disabled channel; set at launch.
+      pwm_path: ""
+      # Conservative initial travel. Adjust after checking the actual servo.
+      min_pulse_us: 1300
+      neutral_pulse_us: 1500
+      max_pulse_us: 1700
+      max_torque_nm: 0.01
+      virtual_inertia_kg_m2: 0.001
+      virtual_max_speed_rad_s: 100.0
+      command_timeout_ms: 500

@@ -1,3 +1,5 @@
+# Motion directions are in base_link: +X forward, +Y left, +yaw CCW.
+# RW_ROTATE_* refers to wheel rotation; the body receives the opposite torque.
 uint8 STOP=0
 uint8 FORWARD=1
 uint8 BACKWARD=2

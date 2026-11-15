@@ -1,31 +1,39 @@
 /**:
-  ros__parameters: 
+  ros__parameters:
+    # Nominal geometry matches airtable_sim/mujoco/airtable.xml.
+    # Positions are in base_link [m]; directions are FORCE ON THE ROBOT,
+    # not exhaust directions (normalized by the controller).
+    # +X: forward, +Y: left, +Z / positive yaw: counterclockwise.
     thrusters:
       names: ["thruster_1", "thruster_2", "thruster_3", "thruster_4"]
 
       thruster_1:
-        position: [0.1, 0.1]
-        direction: [1.0, -1.0]
-        min_thrust_n: 0.0
-        max_thrust_n: 0.5
-
-      thruster_2:
-        position: [0.1, -0.1]
-        direction: [1.0, 1.0]
-        min_thrust_n: 0.0
-        max_thrust_n: 0.5
-
-      thruster_3:
-        position: [-0.1, 0.1]
-        direction: [-1.0, -1.0]
-        min_thrust_n: 0.0
-        max_thrust_n: 0.5
-
-      thruster_4:
-        position: [-0.1, -0.1]
+        position: [0.09, 0.09]
         direction: [-1.0, 1.0]
         min_thrust_n: 0.0
         max_thrust_n: 0.5
+        on_thrust_n: 0.5
+
+      thruster_2:
+        position: [0.09, -0.09]
+        direction: [-1.0, -1.0]
+        min_thrust_n: 0.0
+        max_thrust_n: 0.5
+        on_thrust_n: 0.5
+
+      thruster_3:
+        position: [-0.09, -0.09]
+        direction: [1.0, -1.0]
+        min_thrust_n: 0.0
+        max_thrust_n: 0.5
+        on_thrust_n: 0.5
+
+      thruster_4:
+        position: [-0.09, 0.09]
+        direction: [1.0, 1.0]
+        min_thrust_n: 0.0
+        max_thrust_n: 0.5
+        on_thrust_n: 0.5
 
     reaction_wheels:
       names: ["rw_1"]

@@ -5,6 +5,10 @@ mod io;
 mod ros;
 
 use hardware::HardwareState;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 use rclrs::{
@@ -16,13 +20,51 @@ use sensor_msgs::msg::Imu;
 use sensor_msgs::msg::JointState;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // rclrs 0.7 has no signal handler. Return normally so PWM Drop can disable output.
+    let stopping = Arc::new(AtomicBool::new(false));
+    for signal in [signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM] {
+        signal_hook::flag::register(signal, Arc::clone(&stopping))?;
+    }
     let context = Context::default_from_env()?;
 
     let mut executor = context.create_basic_executor();
 
     let node = executor.create_node("airtable_hardware")?;
 
-    let hardware = node.create_worker(HardwareState::new_dummy());
+    let rw_parameters = ros::parameters::DebugWheelParameters::declare(&node)?;
+    let reaction_wheel = rw_parameters.create_wheel()?;
+    let rw_enabled = reaction_wheel.is_some();
+    let hardware = node.create_worker(HardwareState::new(reaction_wheel));
+
+    let (_rw_subscription, _rw_timer) = if rw_enabled {
+        let subscription = hardware.create_subscription(
+            "actuators/reaction_wheels/command",
+            ros::subscribers::handle_reaction_wheel_command,
+        )?;
+        let publisher = node.create_publisher::<airtable_interfaces::msg::ReactionWheelState>(
+            "actuators/reaction_wheels/state",
+        )?;
+        let clock = node.get_clock();
+        // A steady timer keeps command timeout independent of /clock and use_sim_time.
+        let timer = hardware.create_timer_repeating(
+            Duration::from_millis(20),
+            move |hardware: &mut HardwareState, _now: rclrs::Time| match hardware
+                .update_reaction_wheel()
+            {
+                Ok(Some(state)) => {
+                    let msg = ros::publishers::debug_wheel_to_msg(state, clock.now());
+                    if let Err(error) = publisher.publish(msg) {
+                        eprintln!("[ros] RW state publish failed: {error}");
+                    }
+                }
+                Ok(None) => {}
+                Err(error) => eprintln!("[hardware] RW update failed: {error}"),
+            },
+        )?;
+        (Some(subscription), Some(timer))
+    } else {
+        (None, None)
+    };
 
     let _thruster_pulse_subscription = hardware.create_subscription(
         "actuators/thrusters/pulse",
@@ -47,6 +89,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ---- sensor side ----
 
     let imu_publisher = node.create_publisher::<Imu>("imu/data_raw")?;
+    // Namespaces do not rename frame IDs. Multi-robot launches set robot_N/imu_link;
+    // the default keeps the frame used by the existing single-robot launch.
+    let imu_frame_param = node
+        .declare_parameter::<Arc<str>>("imu_frame_id")
+        .default(Arc::from("imu_link"))
+        .read_only()?;
+    let imu_frame_id = imu_frame_param.get();
+    if imu_frame_id.is_empty() {
+        return Err("imu_frame_id must not be empty".into());
+    }
 
     let mut imu = DummyImu::new();
 
@@ -54,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         node.create_timer_repeating(Duration::from_millis(20), move |now: rclrs::Time| {
             let sample = imu.read();
 
-            let msg = ros::publishers::imu_sample_to_msg(sample, now);
+            let msg = ros::publishers::imu_sample_to_msg(sample, now, &imu_frame_id);
 
             if let Err(error) = imu_publisher.publish(msg) {
                 eprintln!("[ros] Failed to publish IMU: {}", error);
@@ -78,7 +130,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
 
-    executor.spin(SpinOptions::default()).first_error()?;
+    while !stopping.load(Ordering::Relaxed) {
+        executor
+            .spin(SpinOptions::default().timeout(Duration::from_millis(50)))
+            .timeout_ok()
+            .first_error()?;
+    }
 
     Ok(())
 }

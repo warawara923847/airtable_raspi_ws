@@ -1,17 +1,32 @@
 use crate::devices::imu::ImuSample;
+use crate::devices::reaction_wheel::DebugWheelState;
+use airtable_interfaces::msg::ReactionWheelState;
 
 use rclrs::Time;
 use sensor_msgs::msg::Imu;
 use sensor_msgs::msg::JointState;
 
-pub fn imu_sample_to_msg(sample: ImuSample, stamp: Time) -> Imu {
+pub fn debug_wheel_to_msg(state: DebugWheelState, stamp: Time) -> ReactionWheelState {
+    let mut msg = ReactionWheelState::default();
+    let (sec, nanosec) = stamp.to_sec_nanosec().expect("failed to convert ROS time");
+    msg.stamp.sec = sec;
+    msg.stamp.nanosec = nanosec;
+    msg.names = vec![state.name];
+    // All RW feedback fields describe the virtual model, not the SG90 shaft.
+    msg.angular_velocities = vec![state.angular_velocity];
+    msg.commanded_torques = vec![state.commanded_torque];
+    msg.applied_torques = vec![state.applied_torque];
+    msg
+}
+
+pub fn imu_sample_to_msg(sample: ImuSample, stamp: Time, frame_id: &str) -> Imu {
     let mut msg = Imu::default();
 
     let (sec, nanosec) = stamp.to_sec_nanosec().expect("failed to convert ROS time");
 
     msg.header.stamp.sec = sec;
     msg.header.stamp.nanosec = nanosec;
-    msg.header.frame_id = "imu_link".to_string();
+    msg.header.frame_id = frame_id.to_string();
 
     msg.angular_velocity.x = sample.angular_velocity_rad_s[0];
     msg.angular_velocity.y = sample.angular_velocity_rad_s[1];

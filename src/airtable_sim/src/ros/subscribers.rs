@@ -1,25 +1,46 @@
 use airtable_interfaces::msg::ReactionWheelCommand;
 use airtable_interfaces::msg::ThrusterPulseCommand;
+use geometry_msgs::msg::WrenchStamped;
 
 use crate::simulation::Simulation;
 
-pub fn handle_thruster_pulse(simulation: &mut Simulation, msg: ThrusterPulseCommand) {
-    if msg.pulse_duration.sec < 0 {
-        eprintln!("[sim] negative pulse duration: {}", msg.pulse_duration.sec);
-        return;
-    }
-
-    let duration_s = msg.pulse_duration.sec as f64 + msg.pulse_duration.nanosec as f64 * 1e-9;
-
-    if duration_s <= 0.0 {
-        return;
-    }
-
-    for name in &msg.names {
-        if let Err(error) = simulation.fire_thruster("robot_1", name, duration_s) {
-            eprintln!("[sim] error firing thruster {}: {}", name, error);
-        }
-    }
+pub fn create_disturbance_subscription(
+    worker: &rclrs::Worker<Simulation>,
+    vehicle: String,
+    timeout: f64,
+) -> Result<rclrs::WorkerSubscription<WrenchStamped, Simulation>, rclrs::RclrsError> {
+    let topic = format!("/{vehicle}/sim/disturbance/wrench");
+    worker.create_subscription(
+        topic.as_str(),
+        move |sim: &mut Simulation, msg: WrenchStamped| {
+            let force = &msg.wrench.force;
+            let torque = &msg.wrench.torque;
+            if force.z != 0.0
+                || torque.x != 0.0
+                || torque.y != 0.0
+                || msg.header.stamp.sec < 0
+                || msg.header.stamp.nanosec >= 1_000_000_000
+            {
+                sim.clear_disturbance(&vehicle);
+                eprintln!("[sim] rejected non-planar or invalid disturbance command");
+                return;
+            }
+            let stamp = if msg.header.stamp.sec == 0 && msg.header.stamp.nanosec == 0 {
+                None
+            } else {
+                Some(msg.header.stamp.sec as f64 + msg.header.stamp.nanosec as f64 * 1e-9)
+            };
+            if let Err(error) = sim.set_disturbance(
+                &vehicle,
+                &msg.header.frame_id,
+                [force.x, force.y, torque.z],
+                stamp,
+                timeout,
+            ) {
+                eprintln!("[sim] rejected disturbance: {error}");
+            }
+        },
+    )
 }
 
 pub fn create_thruster_subscription(

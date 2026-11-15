@@ -1,0 +1,125 @@
+# Topic names are absolute after expanding {ns}; --namespace overrides robot_1.
+# New experiment conditions normally reuse these profiles and change --label/--meta.
+version: 1
+defaults:
+  namespace: robot_1
+  output_root: recordings
+  storage: mcap
+  storage_preset_profile: zstd_fast
+  max_bag_duration: 300  # seconds per segment; 0 disables splitting
+  max_bag_size: 1073741824  # bytes per segment; first limit reached wins
+
+topic_groups:
+  common:
+    - /tf
+    - /tf_static
+    - /rosout
+    - /parameter_events
+  control:
+    - /joy
+    - '{ns}/commands/manual/motion'
+    - '{ns}/wrench_cmd'
+    - '{ns}/actuators/thrusters/setpoint'
+    - '{ns}/actuators/thrusters/pulse'
+    - '{ns}/actuators/reaction_wheels/command'
+    - '{ns}/actuators/reaction_wheels/state'
+    - '{ns}/trajectory/reference'
+    - '{ns}/trajectory/path'
+    - '{ns}/trajectory/actual_path'
+    - '{ns}/trajectory/error'
+    - '{ns}/trajectory/active'
+  simulation:
+    - /clock
+    - '{ns}/sim/ground_truth'
+    - '{ns}/sim/disturbance/wrench'
+    - '{ns}/sim/disturbance/applied'
+    - '{ns}/imu_1'
+  hardware:
+    - '{ns}/imu/data_raw'
+    - '{ns}/joint_states'
+    - '{ns}/actuators/xy_table/trajectory'
+  tracking:
+    - '{ns}/measurements/external_pose'
+    - '{ns}/state/odometry'  # reserved estimator output; currently not implemented
+  sim_images:
+    - /sim/camera/infra1/image_rect_raw
+    - /sim/camera/infra1/camera_info
+  # Adjust these names to the actual RealSense configuration before use.
+  real_images:
+    - /camera/camera/infra1/image_rect_raw
+    - /camera/camera/infra1/camera_info
+
+profiles:
+  sim:
+    use_sim_time: true
+    groups: [common, control, simulation, tracking]
+  real:
+    use_sim_time: false
+    groups: [common, control, hardware, tracking]
+  # Two-robot profiles (config/robots/dual_robot.yaml). Topics are listed explicitly
+  # because {ns} expands to one namespace only; --namespace does not affect them.
+  dual_sim:
+    use_sim_time: true
+    groups: [common]
+    topics:
+      - /clock
+      - /robot_1/wrench_cmd
+      - /robot_1/actuators/thrusters/setpoint
+      - /robot_1/actuators/thrusters/pulse
+      - /robot_1/trajectory/reference
+      - /robot_1/trajectory/path
+      - /robot_1/trajectory/actual_path
+      - /robot_1/trajectory/error
+      - /robot_1/trajectory/active
+      - /robot_1/sim/ground_truth
+      - /robot_1/sim/disturbance/wrench
+      - /robot_1/sim/disturbance/applied
+      - /robot_1/imu_1
+      - /robot_1/measurements/external_pose
+      - /robot_2/wrench_cmd
+      - /robot_2/actuators/thrusters/setpoint
+      - /robot_2/actuators/thrusters/pulse
+      - /robot_2/trajectory/reference
+      - /robot_2/trajectory/path
+      - /robot_2/trajectory/actual_path
+      - /robot_2/trajectory/error
+      - /robot_2/trajectory/active
+      - /robot_2/sim/ground_truth
+      - /robot_2/sim/disturbance/wrench
+      - /robot_2/sim/disturbance/applied
+      - /robot_2/imu_1
+      - /robot_2/measurements/external_pose
+  dual_real:
+    use_sim_time: false
+    groups: [common]
+    topics:
+      - /robot_1/wrench_cmd
+      - /robot_1/actuators/thrusters/setpoint
+      - /robot_1/actuators/thrusters/pulse
+      - /robot_1/trajectory/reference
+      - /robot_1/trajectory/path
+      - /robot_1/trajectory/actual_path
+      - /robot_1/trajectory/error
+      - /robot_1/trajectory/active
+      - /robot_1/state/odometry
+      - /robot_1/measurements/external_pose
+      - /robot_1/imu/data_raw
+      - /robot_2/wrench_cmd
+      - /robot_2/actuators/thrusters/setpoint
+      - /robot_2/actuators/thrusters/pulse
+      - /robot_2/trajectory/reference
+      - /robot_2/trajectory/path
+      - /robot_2/trajectory/actual_path
+      - /robot_2/trajectory/error
+      - /robot_2/trajectory/active
+      - /robot_2/state/odometry
+      - /robot_2/measurements/external_pose
+      - /robot_2/imu/data_raw
+
+# Other topics use rosbag2's automatic QoS negotiation (including best-effort IMU).
+# Receive latched static transforms even when recording starts after the publisher.
+qos_overrides:
+  /tf_static:
+    history: keep_all
+    reliability: reliable
+    durability: transient_local

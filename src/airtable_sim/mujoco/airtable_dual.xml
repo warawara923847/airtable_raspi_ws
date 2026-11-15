@@ -1,0 +1,228 @@
+<mujoco model="airtable_dual">
+    <!--
+      Two tables with one vehicle each (table_1/robot_1, table_2/robot_2).
+      Element names are prefixed with the vehicle namespace ("robot_N/") so each
+      body/joint/site/actuator/sensor name is unique. Commands still use local
+      names such as thruster_1; airtable_sim maps them through the prefix.
+      Geometry/mass/thrust match airtable.xml (nominal, not identified values).
+      Each table carries its own fixed tracking camera ("table_N/tracking_camera")
+      and four fixed ArUco cards; each vehicle carries one moving card. Marker IDs
+      differ between tables, so a camera/table mix-up fails calibration instead of
+      silently swapping robots. Table placement in world is simulation-only (origins
+      5 m apart along world +X, the tables' short side), not a calibrated layout.
+    -->
+
+    <compiler angle="degree"/>
+
+    <option timestep="0.002" gravity="0 0 0" />
+
+    <visual>
+        <global azimuth="90" elevation="-90" offwidth="1280" offheight="960" />
+    </visual>
+
+    <asset>
+        <mesh name="marker_card" file="markers/card.obj"/>
+        <texture name="marker_10" type="2d" file="markers/marker_10.png"/>
+        <material name="marker_10" texture="marker_10" emission="1" specular="0"/>
+        <texture name="marker_11" type="2d" file="markers/marker_11.png"/>
+        <material name="marker_11" texture="marker_11" emission="1" specular="0"/>
+        <texture name="marker_12" type="2d" file="markers/marker_12.png"/>
+        <material name="marker_12" texture="marker_12" emission="1" specular="0"/>
+        <texture name="marker_13" type="2d" file="markers/marker_13.png"/>
+        <material name="marker_13" texture="marker_13" emission="1" specular="0"/>
+        <texture name="marker_50" type="2d" file="markers/marker_50.png"/>
+        <material name="marker_50" texture="marker_50" emission="1" specular="0"/>
+        <texture name="marker_20" type="2d" file="markers/marker_20.png"/>
+        <material name="marker_20" texture="marker_20" emission="1" specular="0"/>
+        <texture name="marker_21" type="2d" file="markers/marker_21.png"/>
+        <material name="marker_21" texture="marker_21" emission="1" specular="0"/>
+        <texture name="marker_22" type="2d" file="markers/marker_22.png"/>
+        <material name="marker_22" texture="marker_22" emission="1" specular="0"/>
+        <texture name="marker_23" type="2d" file="markers/marker_23.png"/>
+        <material name="marker_23" texture="marker_23" emission="1" specular="0"/>
+        <texture name="marker_51" type="2d" file="markers/marker_51.png"/>
+        <material name="marker_51" texture="marker_51" emission="1" specular="0"/>
+    </asset>
+
+    <worldbody>
+
+        <!-- table_1: world placement is simulation-only, not a calibrated layout. -->
+        <body name="table_1" pos="0 0 0">
+
+            <light pos="0 0 2" dir="0 0 -1"/>
+            <!-- The render camera looks down -Z; the ROS optical frame flips Y and Z. -->
+            <camera name="table_1/tracking_camera" pos="0.5 1.0 2.2" fovy="55"
+                    resolution="1280 960"/>
+
+            <geom name="table_1_surface" type="box" pos="0.5 1.0 -0.1" size="0.5 1.0 0.1"
+                  rgba="0.85 0.85 0.85 1" contype="0" conaffinity="0"/>
+            <geom name="table_1_wall_x_min" type="box" pos="-0.01 1.0 0.05" size="0.01 1.0 0.05"
+                  rgba="0.5 0.5 0.5 1.0" group="2" contype="0" conaffinity="0"/>
+            <geom name="table_1_wall_x_max" type="box" pos="1.01 1.0 0.05" size="0.01 1.0 0.05"
+                  rgba="0.5 0.5 0.5 1.0" group="2" contype="0" conaffinity="0"/>
+            <geom name="table_1_wall_y_min" type="box" pos="0.5 -0.01 0.05" size="0.5 0.01 0.05"
+                  rgba="0.5 0.5 0.5 1.0" group="2" contype="0" conaffinity="0"/>
+            <geom name="table_1_wall_y_max" type="box" pos="0.5 2.01 0.05" size="0.5 0.01 0.05"
+                  rgba="0.5 0.5 0.5 1.0" group="2" contype="0" conaffinity="0"/>
+
+            <!-- Card size 0.15 m includes a white margin; black marker edge is 0.10 m. -->
+            <geom name="table_1/fixed_marker_10" type="mesh" mesh="marker_card"
+                  material="marker_10" pos="0.12 0.12 0.002" mass="0" contype="0" conaffinity="0"/>
+            <geom name="table_1/fixed_marker_11" type="mesh" mesh="marker_card"
+                  material="marker_11" pos="0.88 0.12 0.002" mass="0" contype="0" conaffinity="0"/>
+            <geom name="table_1/fixed_marker_12" type="mesh" mesh="marker_card"
+                  material="marker_12" pos="0.12 1.88 0.002" mass="0" contype="0" conaffinity="0"/>
+            <geom name="table_1/fixed_marker_13" type="mesh" mesh="marker_card"
+                  material="marker_13" pos="0.88 1.88 0.002" mass="0" contype="0" conaffinity="0"/>
+            <body name="robot_1" pos="0.5 1.0 0.01">
+
+                <joint name="robot_1/x" type="slide" axis="1 0 0"/>
+                <joint name="robot_1/y" type="slide" axis="0 1 0"/>
+                <joint name="robot_1/yaw" type="hinge" axis="0 0 1"/>
+
+                <geom name="robot_1/moving_marker_50" type="mesh" mesh="marker_card"
+                      material="marker_50" pos="0 0 0.147" mass="0" contype="0"
+                      conaffinity="0"/>
+
+                <geom name="robot_1/body_geom" type="box" size="0.1 0.1 0.01" mass="1.0"
+                      rgba="0.3 0.5 0.8 1.0"/>
+
+                <body name="robot_1/thruster_1_mount" pos="0.09 0.09 0.018" euler="0 0 135">
+                    <site name="robot_1/thruster_1" type="box" size="0.015 0.008 0.008"
+                          rgba="1 0 0 1"/>
+                    <site name="robot_1/thruster_1_direction" type="capsule"
+                          fromto="0 0 0 0.02 0 0" size="0.003" rgba="0 0 1 0.5"/>
+                </body>
+                <body name="robot_1/thruster_2_mount" pos="0.09 -0.09 0.018" euler="0 0 -135">
+                    <site name="robot_1/thruster_2" type="box" size="0.015 0.008 0.008"
+                          rgba="1 0 0 1"/>
+                    <site name="robot_1/thruster_2_direction" type="capsule"
+                          fromto="0 0 0 0.02 0 0" size="0.003" rgba="0 0 1 0.5"/>
+                </body>
+                <body name="robot_1/thruster_3_mount" pos="-0.09 -0.09 0.018" euler="0 0 -45">
+                    <site name="robot_1/thruster_3" type="box" size="0.015 0.008 0.008"
+                          rgba="1 0 0 1"/>
+                    <site name="robot_1/thruster_3_direction" type="capsule"
+                          fromto="0 0 0 0.02 0 0" size="0.003" rgba="0 0 1 0.5"/>
+                </body>
+                <body name="robot_1/thruster_4_mount" pos="-0.09 0.09 0.018" euler="0 0 45">
+                    <site name="robot_1/thruster_4" type="box" size="0.015 0.008 0.008"
+                          rgba="1 0 0 1"/>
+                    <site name="robot_1/thruster_4_direction" type="capsule"
+                          fromto="0 0 0 0.02 0 0" size="0.003" rgba="0 0 1 0.5"/>
+                </body>
+                <site name="robot_1/reaction_wheel_1" type="box" pos="0 0 0.015"
+                      size="0.015 0.015 0.015" rgba="0.8 0.8 0.2 1"/>
+
+                <site name="robot_1/imu_1" type="box" pos="0.06 0 0.02" size="0.04 0.04 0.02"
+                      euler="0 0 0"/>
+            </body>
+        </body>
+
+        <!-- table_2: world placement is simulation-only, not a calibrated layout. -->
+        <body name="table_2" pos="5.0 0 0">
+
+            <light pos="0 0 2" dir="0 0 -1"/>
+            <!-- The render camera looks down -Z; the ROS optical frame flips Y and Z. -->
+            <camera name="table_2/tracking_camera" pos="0.5 1.0 2.2" fovy="55"
+                    resolution="1280 960"/>
+
+            <geom name="table_2_surface" type="box" pos="0.5 1.0 -0.1" size="0.5 1.0 0.1"
+                  rgba="0.85 0.85 0.85 1" contype="0" conaffinity="0"/>
+            <geom name="table_2_wall_x_min" type="box" pos="-0.01 1.0 0.05" size="0.01 1.0 0.05"
+                  rgba="0.5 0.5 0.5 1.0" group="2" contype="0" conaffinity="0"/>
+            <geom name="table_2_wall_x_max" type="box" pos="1.01 1.0 0.05" size="0.01 1.0 0.05"
+                  rgba="0.5 0.5 0.5 1.0" group="2" contype="0" conaffinity="0"/>
+            <geom name="table_2_wall_y_min" type="box" pos="0.5 -0.01 0.05" size="0.5 0.01 0.05"
+                  rgba="0.5 0.5 0.5 1.0" group="2" contype="0" conaffinity="0"/>
+            <geom name="table_2_wall_y_max" type="box" pos="0.5 2.01 0.05" size="0.5 0.01 0.05"
+                  rgba="0.5 0.5 0.5 1.0" group="2" contype="0" conaffinity="0"/>
+
+            <!-- Card size 0.15 m includes a white margin; black marker edge is 0.10 m. -->
+            <geom name="table_2/fixed_marker_20" type="mesh" mesh="marker_card"
+                  material="marker_20" pos="0.12 0.12 0.002" mass="0" contype="0" conaffinity="0"/>
+            <geom name="table_2/fixed_marker_21" type="mesh" mesh="marker_card"
+                  material="marker_21" pos="0.88 0.12 0.002" mass="0" contype="0" conaffinity="0"/>
+            <geom name="table_2/fixed_marker_22" type="mesh" mesh="marker_card"
+                  material="marker_22" pos="0.12 1.88 0.002" mass="0" contype="0" conaffinity="0"/>
+            <geom name="table_2/fixed_marker_23" type="mesh" mesh="marker_card"
+                  material="marker_23" pos="0.88 1.88 0.002" mass="0" contype="0" conaffinity="0"/>
+            <body name="robot_2" pos="0.5 1.0 0.01">
+
+                <joint name="robot_2/x" type="slide" axis="1 0 0"/>
+                <joint name="robot_2/y" type="slide" axis="0 1 0"/>
+                <joint name="robot_2/yaw" type="hinge" axis="0 0 1"/>
+
+                <geom name="robot_2/moving_marker_51" type="mesh" mesh="marker_card"
+                      material="marker_51" pos="0 0 0.147" mass="0" contype="0"
+                      conaffinity="0"/>
+
+                <geom name="robot_2/body_geom" type="box" size="0.1 0.1 0.01" mass="1.0"
+                      rgba="0.9 0.55 0.2 1.0"/>
+
+                <body name="robot_2/thruster_1_mount" pos="0.09 0.09 0.018" euler="0 0 135">
+                    <site name="robot_2/thruster_1" type="box" size="0.015 0.008 0.008"
+                          rgba="1 0 0 1"/>
+                    <site name="robot_2/thruster_1_direction" type="capsule"
+                          fromto="0 0 0 0.02 0 0" size="0.003" rgba="0 0 1 0.5"/>
+                </body>
+                <body name="robot_2/thruster_2_mount" pos="0.09 -0.09 0.018" euler="0 0 -135">
+                    <site name="robot_2/thruster_2" type="box" size="0.015 0.008 0.008"
+                          rgba="1 0 0 1"/>
+                    <site name="robot_2/thruster_2_direction" type="capsule"
+                          fromto="0 0 0 0.02 0 0" size="0.003" rgba="0 0 1 0.5"/>
+                </body>
+                <body name="robot_2/thruster_3_mount" pos="-0.09 -0.09 0.018" euler="0 0 -45">
+                    <site name="robot_2/thruster_3" type="box" size="0.015 0.008 0.008"
+                          rgba="1 0 0 1"/>
+                    <site name="robot_2/thruster_3_direction" type="capsule"
+                          fromto="0 0 0 0.02 0 0" size="0.003" rgba="0 0 1 0.5"/>
+                </body>
+                <body name="robot_2/thruster_4_mount" pos="-0.09 0.09 0.018" euler="0 0 45">
+                    <site name="robot_2/thruster_4" type="box" size="0.015 0.008 0.008"
+                          rgba="1 0 0 1"/>
+                    <site name="robot_2/thruster_4_direction" type="capsule"
+                          fromto="0 0 0 0.02 0 0" size="0.003" rgba="0 0 1 0.5"/>
+                </body>
+                <site name="robot_2/reaction_wheel_1" type="box" pos="0 0 0.015"
+                      size="0.015 0.015 0.015" rgba="0.8 0.8 0.2 1"/>
+
+                <site name="robot_2/imu_1" type="box" pos="0.06 0 0.02" size="0.04 0.04 0.02"
+                      euler="0 0 0"/>
+            </body>
+        </body>
+
+    </worldbody>
+
+    <actuator>
+            <motor name="robot_1/thruster_1_actuator" site="robot_1/thruster_1"
+                   gear="1 0 0 0 0 0" ctrllimited="true" ctrlrange="0 0.5"/>
+            <motor name="robot_1/thruster_2_actuator" site="robot_1/thruster_2"
+                   gear="1 0 0 0 0 0" ctrllimited="true" ctrlrange="0 0.5"/>
+            <motor name="robot_1/thruster_3_actuator" site="robot_1/thruster_3"
+                   gear="1 0 0 0 0 0" ctrllimited="true" ctrlrange="0 0.5"/>
+            <motor name="robot_1/thruster_4_actuator" site="robot_1/thruster_4"
+                   gear="1 0 0 0 0 0" ctrllimited="true" ctrlrange="0 0.5"/>
+            <motor name="robot_1/reaction_wheel_1_actuator" site="robot_1/reaction_wheel_1"
+                   gear="0 0 0 0 0 -1"/>
+            <motor name="robot_2/thruster_1_actuator" site="robot_2/thruster_1"
+                   gear="1 0 0 0 0 0" ctrllimited="true" ctrlrange="0 0.5"/>
+            <motor name="robot_2/thruster_2_actuator" site="robot_2/thruster_2"
+                   gear="1 0 0 0 0 0" ctrllimited="true" ctrlrange="0 0.5"/>
+            <motor name="robot_2/thruster_3_actuator" site="robot_2/thruster_3"
+                   gear="1 0 0 0 0 0" ctrllimited="true" ctrlrange="0 0.5"/>
+            <motor name="robot_2/thruster_4_actuator" site="robot_2/thruster_4"
+                   gear="1 0 0 0 0 0" ctrllimited="true" ctrlrange="0 0.5"/>
+            <motor name="robot_2/reaction_wheel_1_actuator" site="robot_2/reaction_wheel_1"
+                   gear="0 0 0 0 0 -1"/>
+    </actuator>
+
+    <sensor>
+            <accelerometer name="robot_1/imu_1_accel" site="robot_1/imu_1"/>
+            <gyro name="robot_1/imu_1_gyro" site="robot_1/imu_1"/>
+            <framequat name="robot_1/imu_1_orientation" objtype="site" objname="robot_1/imu_1"/>
+            <accelerometer name="robot_2/imu_1_accel" site="robot_2/imu_1"/>
+            <gyro name="robot_2/imu_1_gyro" site="robot_2/imu_1"/>
+            <framequat name="robot_2/imu_1_orientation" objtype="site" objname="robot_2/imu_1"/>
+    </sensor>
+</mujoco>

@@ -9,6 +9,7 @@ dependencies = [
  "airtable_interfaces",
  "rclrs",
  "sensor_msgs",
+ "signal-hook",
  "trajectory_msgs",
 ]
 
@@ -639,6 +640,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-hook"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d881a16cf4426aa584979d30bd82cb33429027e42122b169753d6ef1085ed6e2"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
+name = "signal-hook-registry"
+version = "1.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
+dependencies = [
+ "errno",
+ "libc",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -833,6 +854,14 @@ name = "actuator_msgs"
 version = "0.0.1"
 
 [[patch.unused]]
+name = "airtable_hardware"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "airtable_sim"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "composition_interfaces"
 version = "2.0.4"
 
@@ -922,7 +951,7 @@ version = "2.0.4"
 
 [[patch.unused]]
 name = "tf2_msgs"
-version = "0.36.22"
+version = "0.36.23"
 
 [[patch.unused]]
 name = "theora_image_transport"

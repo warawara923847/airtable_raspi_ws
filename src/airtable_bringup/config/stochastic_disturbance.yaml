@@ -1,0 +1,21 @@
+/**:
+  ros__parameters:
+    # Independent normal samples, held for noise_sample_period_s in simulation time.
+    # The controller/estimator is not given the realized disturbance.
+    profile: gaussian
+    frame_id: table_1
+    # Means [N, N, Nm]. For other profiles these fields are signed amplitudes.
+    force_x_n: 0.0
+    force_y_n: 0.0
+    torque_z_nm: 0.0
+    # Standard deviations; variance is the square of each value.
+    # Covariance = diag(4e-4 N^2, 4e-4 N^2, 2.5e-7 (Nm)^2).
+    force_x_stddev_n: 0.02
+    force_y_stddev_n: 0.02
+    torque_z_stddev_nm: 0.0005
+    noise_sample_period_s: 0.1
+    noise_seed: 42
+    start_delay_s: 8.0
+    duration_s: 20.0  # 0 = continue indefinitely after start_delay_s
+    publish_rate_hz: 50.0
+    wait_for_trajectory: true

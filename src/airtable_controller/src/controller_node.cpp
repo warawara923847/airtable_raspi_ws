@@ -22,6 +22,8 @@ class ControllerNode : public rclcpp::Node
 public:
     ControllerNode(): Node("airtable_controller")
 {
+    manual_enabled_ = this->declare_parameter<bool>("manual_enabled", true);
+    wrench_frame_ = this->declare_parameter<std::string>("wrench_frame", "");
     thruster_configs_=load_thrusters(),
 
     allocator_=
@@ -236,7 +238,13 @@ private:
         const double fy = msg->wrench.force.y;
         const double mz = msg->wrench.torque.z;
 
-        const auto thrusts = allocator_->allocate(fx, fy, mz);
+        const bool valid = std::isfinite(fx) && std::isfinite(fy) && std::isfinite(mz) &&
+            (wrench_frame_.empty() || msg->header.frame_id == wrench_frame_);
+        const auto thrusts = valid ? allocator_->allocate(fx, fy, mz) :
+            std::vector<double>(thruster_configs_.size(), 0.0);
+        if (!valid) {
+            RCLCPP_WARN(this->get_logger(), "Rejected non-finite or wrong-frame wrench");
+        }
 
         airtable_interfaces::msg::
             ThrusterSetpoint output;
@@ -331,6 +339,9 @@ private:
     void rw_state_callback(
         const airtable_interfaces::msg::ReactionWheelState::SharedPtr msg)
     {
+        if (!manual_enabled_) {
+            return;
+        }
         for (std::size_t i = 0; i < msg->names.size(); ++i) {
             if (msg->names[i] != rw_name_) {
                 continue;
@@ -362,6 +373,9 @@ private:
     void manual_callback(
         const airtable_interfaces::msg::ManualMotionCommand::SharedPtr msg)
     {
+        if (!manual_enabled_) {
+            return;
+        }
         using Command = airtable_interfaces::msg::ManualMotionCommand;
 
         RCLCPP_INFO(
@@ -402,6 +416,8 @@ private:
     ManualYawActuator manual_yaw_actuators_;
 
     std::string rw_name_;
+    std::string wrench_frame_;
+    bool manual_enabled_{true};
 
     double rw_current_speed_rad_s_{0.0};
     double rw_target_speed_rad_s_{0.0};

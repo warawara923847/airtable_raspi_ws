@@ -26,6 +26,7 @@ def generate_launch_description():
         package="airtable_teleop",
         executable="airtable_teleop_node",
         name="airtable_teleop",
+        namespace="robot_1",
         output="screen",
         parameters=[teleop_params],
     )
@@ -43,6 +44,7 @@ def generate_launch_description():
         package="airtable_hardware",
         executable="airtable_hardware",
         name="airtable_hardware",
+        namespace="robot_1",
         output="screen",
     )
 

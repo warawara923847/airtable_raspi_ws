@@ -1,0 +1,15 @@
+/**:
+  ros__parameters:
+    # Applied to the COM, not routed through the thrusters or controller.
+    # Valid axes: table_1, robot_1/base_link, world.
+    frame_id: table_1
+    force_x_n: 0.02
+    force_y_n: 0.0
+    torque_z_nm: 0.0005
+    profile: pulse  # pulse | step | sine | gaussian (see stochastic_disturbance.yaml)
+    start_delay_s: 8.0
+    duration_s: 2.0  # pulse duration; sine: 0=infinite; ignored by step
+    period_s: 5.0
+    publish_rate_hz: 50.0
+    # Timing starts at trajectory/path's initial timestamp, not node startup.
+    wait_for_trajectory: true

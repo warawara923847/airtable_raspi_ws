@@ -20,10 +20,10 @@ impl TfPublishers {
     pub fn publish_static_frames(
         &self,
         tables: &[TablePose],
-        camera: Option<TransformStamped>,
+        cameras: Vec<TransformStamped>,
     ) -> Result<(), rclrs::RclrsError> {
         let mut transforms: Vec<_> = tables.iter().map(table_pose_to_transform).collect();
-        transforms.extend(camera);
+        transforms.extend(cameras);
 
         let msg = TFMessage { transforms };
 

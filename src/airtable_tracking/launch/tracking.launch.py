@@ -62,6 +62,9 @@ def generate_launch_description():
         ('start_camera', 'false', 'Start a physical RealSense camera'),
         ('start_detectors', 'true', 'Detect markers; disable for synthetic Pose inputs'),
         ('use_sim_time', 'false', 'Use /clock; requires a clock publisher'),
+        ('camera_serial_no', "''", "RealSense serial, quoted like \"'123'\"; '' = any"),
+        ('camera_name', 'camera', 'RealSense node name'),
+        ('camera_namespace', 'camera', 'RealSense namespace (topics /<ns>/<name>/...)'),
     ]
     camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(Path(camera_share) / 'launch/rs_launch.py')),
@@ -70,6 +73,10 @@ def generate_launch_description():
             'enable_infra1': 'true', 'enable_infra2': 'false',
             'enable_color': 'false', 'enable_depth': 'false',
             'depth_module.infra_profile': '640x480x30',
+            # Select one of several cameras by serial; "''" (default) accepts any one.
+            'serial_no': LaunchConfiguration('camera_serial_no'),
+            'camera_name': LaunchConfiguration('camera_name'),
+            'camera_namespace': LaunchConfiguration('camera_namespace'),
         }.items(),
     )
     return LaunchDescription([

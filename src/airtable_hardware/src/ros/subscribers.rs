@@ -2,8 +2,31 @@ use std::time::Duration;
 
 use crate::hardware::HardwareState;
 
+use airtable_interfaces::msg::ReactionWheelCommand;
 use airtable_interfaces::msg::ThrusterPulseCommand;
 use trajectory_msgs::msg::JointTrajectory;
+
+pub fn handle_reaction_wheel_command(hardware: &mut HardwareState, msg: ReactionWheelCommand) {
+    // Validate the complete message before changing output or refreshing the watchdog.
+    if msg.names.len() != msg.torques.len()
+        || msg.torques.iter().any(|torque| !torque.is_finite())
+        || msg
+            .names
+            .iter()
+            .enumerate()
+            .any(|(i, name)| msg.names[..i].contains(name))
+    {
+        eprintln!(
+            "[ros] malformed RW command: mismatched arrays, duplicate names or non-finite torque"
+        );
+        return;
+    }
+    for (name, torque) in msg.names.iter().zip(&msg.torques) {
+        if let Err(error) = hardware.set_reaction_wheel_torque(name, *torque) {
+            eprintln!("[ros] RW command rejected: {error}");
+        }
+    }
+}
 
 pub fn handle_thruster_pulse(hardware: &mut HardwareState, msg: ThrusterPulseCommand) {
     if msg.pulse_duration.sec < 0 {

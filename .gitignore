@@ -13,6 +13,7 @@ MUJOCO_LOG.TXT
 *.bag
 *.db3
 *.mcap
+recordings/
 
 # LSP (clangd) 用の生成物
 compile_commands.json

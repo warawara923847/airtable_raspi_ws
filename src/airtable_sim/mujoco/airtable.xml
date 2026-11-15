@@ -108,7 +108,7 @@
                     name="body_geom"
                     type="box"
                     size="0.1 0.1 0.01"
-                    mass="10.0"
+                    mass="1.0"
                     rgba="0.3 0.5 0.8 1.0"
                 />
 
@@ -201,9 +201,9 @@
                 <!-- Reaction wheel -->
                 <site
                     name="reaction_wheel_1"
-                    type="cylinder"
-                    pos="0 0 0.03"
-                    size="0.03 0.01"
+                    type="box"
+                    pos="0 0 0.015"
+                    size="0.015 0.015 0.015"
                     rgba="0.8 0.8 0.2 1"
                 />
 

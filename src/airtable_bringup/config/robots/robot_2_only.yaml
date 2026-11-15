@@ -1,0 +1,24 @@
+# Robot configuration (not a ROS parameter file): only table_2/robot_2.
+# Used to check that robot_2 runs without any robot_1/table_1 dependency.
+version: 1
+description: table_2 and robot_2 only.
+simulation:
+  model: package://airtable_sim/mujoco/airtable_robot_2.xml
+tables:
+  table_2:
+    world_pose: null
+defaults:
+  trajectory_params: package://airtable_controller/config/trajectory.yaml
+  thruster_params: package://airtable_controller/config/thrusters.yaml
+robots:
+  - namespace: robot_2
+    table_frame: table_2
+    state_topic: state/odometry
+    simulation:
+      element_prefix: robot_2/
+      initial_pose: null
+    tracking:
+      simulation_params: package://airtable_tracking/config/simulation_tracking_robot_2.yaml
+      simulation_camera: table_2/tracking_camera
+    hardware:
+      imu_frame: robot_2/imu_link

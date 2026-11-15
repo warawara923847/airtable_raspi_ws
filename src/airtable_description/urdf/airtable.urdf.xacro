@@ -18,7 +18,8 @@
   <link name="base_link">
     <visual>
       <geometry>
-        <box size="0.5 0.5 0.02"/>
+        <!-- Nominal base dimensions match airtable_sim/mujoco/airtable.xml. -->
+        <box size="0.20 0.20 0.02"/>
       </geometry>
     </visual>
   </link>

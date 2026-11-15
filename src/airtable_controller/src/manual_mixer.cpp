@@ -9,41 +9,42 @@ namespace airtable_controller
     {
         using Command = airtable_interfaces::msg::ManualMotionCommand;
 
+        // Body frame: +X forward, +Y left, +yaw counterclockwise.
         switch (command){
             case Command::FORWARD:
                 return {
-                    "thruster_2",
                     "thruster_3",
+                    "thruster_4",
                 };
 
             case Command::BACKWARD:
                 return {
                     "thruster_1",
-                    "thruster_4",
+                    "thruster_2",
                 };
 
             case Command::RIGHT:
                 return {
+                    "thruster_2",
                     "thruster_3",
-                    "thruster_4",
                 };
 
             case Command::LEFT:
                 return {
                     "thruster_1",
-                    "thruster_2",
+                    "thruster_4",
                 };
 
             case Command::THRUSTER_ROTATE_CCW:
                 return {
-                    "thruster_2",
-                    "thruster_4",
+                    "thruster_1",
+                    "thruster_3",
                 };
 
             case Command::THRUSTER_ROTATE_CW:
                 return {
-                    "thruster_1",
-                    "thruster_3",
+                    "thruster_2",
+                    "thruster_4",
                 };
 
             default:

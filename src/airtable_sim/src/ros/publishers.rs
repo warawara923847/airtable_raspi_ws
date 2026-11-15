@@ -1,16 +1,19 @@
 use airtable_interfaces::msg::ReactionWheelState;
+use geometry_msgs::msg::WrenchStamped;
 use nav_msgs::msg::Odometry;
 use rclrs::{IntoPrimitiveOptions, Node, Publisher};
 use sensor_msgs::msg::Imu;
 use std::collections::HashMap;
 
 use crate::actuators::ReactionWheelStateData;
+use crate::disturbance::AppliedDisturbance;
 use crate::ros::conversions::sim_time_to_ros_time;
 use crate::sensors::ImuState;
 use crate::state::PlanarState;
 
 pub struct VehicleRosHandles {
     pub(crate) gt_publisher: GroundTruthPublisher,
+    pub(crate) disturbance_publisher: DisturbancePublisher,
     pub(crate) rw_state_publisher: ReactionWheelStatePublisher,
     pub(crate) imu_publishers: HashMap<String, ImuPublisher>,
 
@@ -22,6 +25,23 @@ pub struct GroundTruthPublisher {
 
     frame_id: String,
     child_frame_id: String,
+}
+
+pub struct DisturbancePublisher {
+    publisher: Publisher<WrenchStamped>,
+    body_frame: String,
+}
+
+impl DisturbancePublisher {
+    pub fn publish(&self, applied: &AppliedDisturbance) -> Result<(), rclrs::RclrsError> {
+        let mut msg = WrenchStamped::default();
+        msg.header.stamp = sim_time_to_ros_time(applied.time);
+        msg.header.frame_id = self.body_frame.clone();
+        msg.wrench.force.x = applied.body_wrench[0];
+        msg.wrench.force.y = applied.body_wrench[1];
+        msg.wrench.torque.z = applied.body_wrench[2];
+        self.publisher.publish(msg)
+    }
 }
 
 pub struct ReactionWheelStatePublisher {
@@ -49,6 +69,11 @@ impl VehicleRosHandles {
             table_frame.clone(),
             format!("{vehicle_name}/base_link"),
         );
+        let disturbance_topic = format!("/{vehicle_name}/sim/disturbance/applied");
+        let disturbance_publisher = DisturbancePublisher {
+            publisher: node.create_publisher::<WrenchStamped>(disturbance_topic.as_str())?,
+            body_frame: format!("{vehicle_name}/base_link"),
+        };
 
         // RW state publisher
         let rw_state_topic = format!("/{vehicle_name}/actuators/reaction_wheels/state");
@@ -72,6 +97,7 @@ impl VehicleRosHandles {
 
         Ok(Self {
             gt_publisher,
+            disturbance_publisher,
             rw_state_publisher,
             imu_publishers,
             table_frame,

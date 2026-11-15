@@ -1,5 +1,6 @@
 mod actuators;
 mod camera;
+mod disturbance;
 mod model;
 mod ros;
 mod sensors;
@@ -16,12 +17,15 @@ use rclrs::{Context, CreateBasicExecutor, IntoPrimitiveOptions, RclrsErrorFilter
 use rosgraph_msgs::msg::Clock;
 use tf2_msgs::msg::TFMessage;
 
-use crate::camera::{CameraSensor, CameraSnapshot};
+use crate::camera::{CameraSensor, CameraSnapshot, CameraSpec};
 use crate::ros::conversions::sim_time_to_ros_time;
 use crate::ros::publishers::VehicleRosHandles;
-use crate::ros::subscribers::{create_reaction_wheel_subscription, create_thruster_subscription};
+use crate::ros::subscribers::{
+    create_disturbance_subscription, create_reaction_wheel_subscription,
+    create_thruster_subscription,
+};
 use crate::ros::tf::TfPublishers;
-use crate::simulation::Simulation;
+use crate::simulation::{Simulation, VehicleConfig};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     //
@@ -49,29 +53,165 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .declare_parameter::<Arc<str>>("camera_name")
         .default("tracking_camera".into())
         .read_only()?;
+    // Several cameras: parallel lists of MJCF camera names, absolute topic namespaces
+    // (<ns>/infra1/image_rect_raw) and optical frames. Empty: camera_name with the
+    // original /sim/camera topics and sim_camera_infra1_optical_frame.
+    let camera_names_param = node
+        .declare_parameter::<Arc<[Arc<str>]>>("camera_names")
+        .default(Arc::from([]))
+        .read_only()?;
+    let camera_namespaces_param = node
+        .declare_parameter::<Arc<[Arc<str>]>>("camera_namespaces")
+        .default(Arc::from([]))
+        .read_only()?;
+    let camera_frames_param = node
+        .declare_parameter::<Arc<[Arc<str>]>>("camera_frames")
+        .default(Arc::from([]))
+        .read_only()?;
     let fps_param = node
         .declare_parameter("camera_fps")
         .default(30.0)
         .read_only()?;
+    // Legacy single-robot form: applies to robot_1 only.
+    let initial_pose_param = node
+        .declare_parameter::<Arc<[f64]>>("initial_pose")
+        .default(Arc::from([]))
+        .read_only()?;
+    // Vehicles to register. Each MuJoCo body is named after its vehicle; actuators
+    // and sensors use "<prefix><local name>". Defaults keep the original model.
+    let vehicles_param = node
+        .declare_parameter::<Arc<[Arc<str>]>>("vehicles")
+        .default(Arc::from([Arc::from("robot_1")]))
+        .read_only()?;
+    let prefixes_param = node
+        .declare_parameter::<Arc<[Arc<str>]>>("vehicle_element_prefixes")
+        .default(Arc::from([Arc::from("")]))
+        .read_only()?;
+    // Per-vehicle table-local [x, y, yaw] triples, in initial_pose_vehicles order.
+    let initial_pose_vehicles_param = node
+        .declare_parameter::<Arc<[Arc<str>]>>("initial_pose_vehicles")
+        .default(Arc::from([]))
+        .read_only()?;
+    let initial_poses_param = node
+        .declare_parameter::<Arc<[f64]>>("initial_poses")
+        .default(Arc::from([]))
+        .read_only()?;
+    let disturbance_timeout_param = node
+        .declare_parameter("disturbance_timeout_s")
+        .default(0.25_f64)
+        .read_only()?;
+    let disturbance_timeout = disturbance_timeout_param.get();
+    if !disturbance_timeout.is_finite() || disturbance_timeout <= 0.0 {
+        return Err("disturbance_timeout_s must be finite and positive".into());
+    }
     let model_path = model_param.get();
-    let camera_name = camera_name_param.get();
     let enable_camera = camera_param.get();
+    let camera_names = camera_names_param.get();
+    let camera_namespaces = camera_namespaces_param.get();
+    let camera_frames = camera_frames_param.get();
+    let camera_specs: Vec<CameraSpec> = if camera_names.is_empty() {
+        if !camera_namespaces.is_empty() || !camera_frames.is_empty() {
+            return Err("camera_namespaces/camera_frames require camera_names".into());
+        }
+        vec![CameraSpec::legacy(camera_name_param.get().as_ref())]
+    } else {
+        if camera_namespaces.len() != camera_names.len()
+            || camera_frames.len() != camera_names.len()
+        {
+            return Err(
+                "camera_names, camera_namespaces and camera_frames must have the same length"
+                    .into(),
+            );
+        }
+        camera_names
+            .iter()
+            .zip(camera_namespaces.iter())
+            .zip(camera_frames.iter())
+            .map(|((name, namespace), frame)| CameraSpec {
+                name: name.to_string(),
+                namespace: namespace.to_string(),
+                optical_frame: frame.to_string(),
+            })
+            .collect()
+    };
 
-    let (simulation, mut viewer) = if viewer_param.get() {
-        let (simulation, viewer) =
-            Simulation::new_with_viewer(&model_path).map_err(std::io::Error::other)?;
+    let vehicle_names = vehicles_param.get();
+    let prefixes = prefixes_param.get();
+    if vehicle_names.len() != prefixes.len() {
+        return Err(format!(
+            "vehicles ({}) and vehicle_element_prefixes ({}) must have the same length",
+            vehicle_names.len(),
+            prefixes.len()
+        )
+        .into());
+    }
+    let vehicle_configs: Vec<VehicleConfig> = vehicle_names
+        .iter()
+        .zip(prefixes.iter())
+        .map(|(name, prefix)| VehicleConfig::new(name.as_ref(), prefix.as_ref()))
+        .collect();
+    let mut initial_poses: Vec<(String, [f64; 3])> = Vec::new();
+    let legacy_pose = initial_pose_param.get();
+    if !legacy_pose.is_empty() {
+        if legacy_pose.len() != 3 {
+            return Err("initial_pose must be empty or [x_m, y_m, yaw_rad]".into());
+        }
+        initial_poses.push((
+            "robot_1".into(),
+            [legacy_pose[0], legacy_pose[1], legacy_pose[2]],
+        ));
+    }
+    let pose_vehicles = initial_pose_vehicles_param.get();
+    let pose_values = initial_poses_param.get();
+    if pose_values.len() != 3 * pose_vehicles.len() {
+        return Err(
+            "initial_poses must contain [x_m, y_m, yaw_rad] for each initial_pose_vehicles entry"
+                .into(),
+        );
+    }
+    for (index, name) in pose_vehicles.iter().enumerate() {
+        if initial_poses
+            .iter()
+            .any(|(other, _)| other == name.as_ref())
+        {
+            return Err(format!("initial pose for {name} is specified twice").into());
+        }
+        let values = &pose_values[3 * index..3 * index + 3];
+        initial_poses.push((name.to_string(), [values[0], values[1], values[2]]));
+    }
+
+    let (mut simulation, mut viewer) = if viewer_param.get() {
+        let (simulation, viewer) = Simulation::new_with_viewer(&model_path, &vehicle_configs)
+            .map_err(std::io::Error::other)?;
         (simulation, Some(viewer))
     } else {
         (
-            Simulation::new(&model_path).map_err(std::io::Error::other)?,
+            Simulation::with_vehicles(&model_path, &vehicle_configs)
+                .map_err(std::io::Error::other)?,
             None,
         )
     };
+    // Apply every pose before the first physics step.
+    for (name, [x, y, yaw]) in &initial_poses {
+        simulation
+            .set_initial_pose(name, *x, *y, *yaw)
+            .map_err(|error| std::io::Error::other(format!("initial pose for {name}: {error}")))?;
+    }
+    if !initial_poses.is_empty() {
+        simulation.sync_viewer();
+    }
+    println!(
+        "[sim] model={model_path}, camera={enable_camera}, vehicles={vehicle_configs:?}, \
+         initial_poses={initial_poses:?}"
+    );
+    if enable_camera {
+        println!("[sim] cameras={camera_specs:?}");
+    }
     let mut camera = if enable_camera {
         Some(CameraSensor::new(
             &node,
             &model_path,
-            &camera_name,
+            &camera_specs,
             fps_param.get(),
         )?)
     } else {
@@ -114,15 +254,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &table_poses,
         camera
             .as_ref()
-            .map(|sensor| sensor.optical_transform(&camera_name)),
+            .map(CameraSensor::optical_transforms)
+            .unwrap_or_default(),
     )?;
 
     let simulation_worker = node.create_worker(simulation);
 
     let mut thruster_subscriptions = Vec::new();
     let mut reaction_wheel_subscriptions = Vec::new();
+    let mut disturbance_subscriptions = Vec::new();
 
     for vehicle_name in &vehicle_names {
+        disturbance_subscriptions.push(create_disturbance_subscription(
+            &simulation_worker,
+            vehicle_name.clone(),
+            disturbance_timeout,
+        )?);
         let thruster_subscription =
             create_thruster_subscription(&simulation_worker, vehicle_name.clone())?;
         thruster_subscriptions.push(thruster_subscription);
@@ -186,6 +333,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // ------------------------------------------------
                 if let Err(error) = handles.gt_publisher.publish(&state) {
                     eprintln!("[sim] failed to publish GT for {}: {}", vehicle_name, error);
+                }
+                if let Ok(applied) = simulation.applied_disturbance(vehicle_name) {
+                    if let Err(error) = handles.disturbance_publisher.publish(&applied) {
+                        eprintln!("[sim] failed to publish applied disturbance: {error}");
+                    }
                 }
 
                 // ------------------------------------------------
