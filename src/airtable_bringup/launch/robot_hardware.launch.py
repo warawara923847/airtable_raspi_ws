@@ -6,13 +6,15 @@ Raspberry Pi side: start only the selected robot's airtable_hardware node.
 
 No teleop, manual controller or trajectory controller is started here; the PC
 runs robots_trajectory_control.launch.py. The thruster/IMU I/O of
-airtable_hardware is still a dummy stub; this launch never enables real I/O by
-itself (only hardware.params of the robot configuration can).
+airtable_hardware defaults to dummy backends; real I/O is enabled only by a parameter
+file: hardware.params of the robot configuration or hardware_params:=, e.g.
+package://airtable_bringup/config/hardware_pi.yaml (GPIO valves, optional ARW-3m).
 """
 
 from pathlib import Path
 
-from airtable_bringup.robot_config import ConfigError, load_robot_config, select_robots
+from airtable_bringup.robot_config import (
+    ConfigError, load_robot_config, resolve_path, select_robots)
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
 from launch_ros.actions import Node
@@ -21,6 +23,8 @@ from launch_ros.actions import Node
 ARGUMENTS = [
     ('robot_config', '', 'Robot configuration YAML; empty: config/robots/single_robot.yaml'),
     ('robot', '', 'Namespace of the robot this Pi drives; required with several robots'),
+    ('hardware_params', '', 'ROS parameter file replacing hardware.params of the configuration '
+                            '(path or package://...); empty: use the configuration'),
 ]
 
 
@@ -32,7 +36,8 @@ def setup(context):
     config_path = args['robot_config'] or str(Path(
         get_package_share_directory('airtable_bringup'), 'config', 'robots',
         'single_robot.yaml'))
-    config = load_robot_config(config_path)
+    # The Pi has no sim/controller/tracking packages; resolve only the hardware section.
+    config = load_robot_config(config_path, hardware_only=True)
     names = [robot['namespace'] for robot in config['robots']]
     if not args['robot'] and len(names) != 1:
         raise ConfigError(f'robot:= is required; {config_path} defines {names}')
@@ -41,6 +46,8 @@ def setup(context):
         raise ConfigError('robot:= must name exactly one robot')
     robot = robots[0]
     hardware = robot['hardware']
+    if args['hardware_params']:
+        hardware['params'] = resolve_path(args['hardware_params'], Path.cwd(), 'hardware_params')
     parameters = [] if hardware['params'] is None else [str(hardware['params'])]
     parameters.append({'use_sim_time': False, 'imu_frame_id': hardware['imu_frame']})
     actions = [

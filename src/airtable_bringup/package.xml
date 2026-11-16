@@ -30,11 +30,13 @@
 
   <exec_depend>joy</exec_depend>
 
-  <exec_depend>airtable_teleop</exec_depend>
-  <exec_depend>airtable_controller</exec_depend>
+  <!-- Raspberry Pi builds only interfaces / hardware / bringup. Set
+       AIRTABLE_BUILD_TARGET=pi there to drop the PC-only packages; unset on the PC. -->
+  <exec_depend condition="$AIRTABLE_BUILD_TARGET != pi">airtable_teleop</exec_depend>
+  <exec_depend condition="$AIRTABLE_BUILD_TARGET != pi">airtable_controller</exec_depend>
   <exec_depend>airtable_hardware</exec_depend>
-  <exec_depend>airtable_sim</exec_depend>
-  <exec_depend>airtable_tracking</exec_depend>
+  <exec_depend condition="$AIRTABLE_BUILD_TARGET != pi">airtable_sim</exec_depend>
+  <exec_depend condition="$AIRTABLE_BUILD_TARGET != pi">airtable_tracking</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>

@@ -20,6 +20,11 @@ def pose_matrix(position, quaternion):
     return transform
 
 
+def table_from_camera_root(camera_from_table, root_from_camera):
+    """Return T_table_root for a camera driver frame (camera_link) above the optical frame."""
+    return np.linalg.inv(camera_from_table) @ np.linalg.inv(root_from_camera)
+
+
 def register_markers(table_points, camera_points, max_residual):
     """Fit T_camera_table to corresponding marker centers with a proper rotation."""
     table_points = np.asarray(table_points, dtype=float)

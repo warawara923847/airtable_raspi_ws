@@ -17,6 +17,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(tracking_geometry test/test_geometry.py)
   ament_add_pytest_test(tracking_observations test/test_observations.py)
+  ament_add_pytest_test(tracking_visualization test/test_visualization.py)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files

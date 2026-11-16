@@ -57,13 +57,13 @@
 
             <!-- Card size 0.15 m includes a white margin; black marker edge is 0.10 m. -->
             <geom name="table_2/fixed_marker_20" type="mesh" mesh="marker_card"
-                  material="marker_20" pos="0.12 0.12 0.002" mass="0" contype="0" conaffinity="0"/>
+                  material="marker_20" pos="0.075 1.925 0.002" mass="0" contype="0" conaffinity="0"/>
             <geom name="table_2/fixed_marker_21" type="mesh" mesh="marker_card"
-                  material="marker_21" pos="0.88 0.12 0.002" mass="0" contype="0" conaffinity="0"/>
+                  material="marker_21" pos="0.925 1.925 0.002" mass="0" contype="0" conaffinity="0"/>
             <geom name="table_2/fixed_marker_22" type="mesh" mesh="marker_card"
-                  material="marker_22" pos="0.12 1.88 0.002" mass="0" contype="0" conaffinity="0"/>
+                  material="marker_22" pos="0.075 0.075 0.002" mass="0" contype="0" conaffinity="0"/>
             <geom name="table_2/fixed_marker_23" type="mesh" mesh="marker_card"
-                  material="marker_23" pos="0.88 1.88 0.002" mass="0" contype="0" conaffinity="0"/>
+                  material="marker_23" pos="0.925 0.075 0.002" mass="0" contype="0" conaffinity="0"/>
             <body name="robot_2" pos="0.5 1.0 0.01">
 
                 <joint name="robot_2/x" type="slide" axis="1 0 0"/>

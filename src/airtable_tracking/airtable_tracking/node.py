@@ -3,15 +3,19 @@
 from functools import partial
 import math
 
-from airtable_tracking.geometry import pose_matrix
+from airtable_tracking.geometry import pose_matrix, table_from_camera_root
 from airtable_tracking.observations import MarkerObservations
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from airtable_tracking.visualization import layout_markers
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TransformStamped
 import numpy as np
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
-from tf_transformations import quaternion_from_euler
+from rclpy.qos import DurabilityPolicy, qos_profile_sensor_data, QoSProfile
+from rclpy.time import Time
+from tf2_ros import Buffer, StaticTransformBroadcaster, TransformException, TransformListener
+from tf_transformations import quaternion_from_euler, quaternion_from_matrix
+from visualization_msgs.msg import MarkerArray
 
 
 def _position(msg):
@@ -62,6 +66,24 @@ class TrackingNode(Node):
         self.pose_publisher = self.create_publisher(
             PoseWithCovarianceStamped, 'measurements/external_pose', 10
         )
+        # Configured table area and fixed markers for RViz; latched for late subscribers.
+        self.layout_publisher = self.create_publisher(
+            MarkerArray, 'tracking/layout',
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self.layout_publisher.publish(layout_markers(
+            self.table_frame, parameter('table_size', [1.0, 2.0]), fixed_ids,
+            self.observations.table_points, parameter('marker_size', 0.1)))
+        # Root of the camera driver's TF tree (camera_link). After calibration it is attached
+        # below table_frame so the real camera appears above the table. '' disables it, e.g.
+        # in simulation where the simulator already publishes the camera frame.
+        self.camera_tf_frame = parameter('camera_tf_frame', '')
+        self.camera_tf_timer = None
+        if self.camera_tf_frame:
+            if self.camera_tf_frame == self.table_frame:
+                raise ValueError('camera_tf_frame must differ from table_frame')
+            self.tf_buffer = Buffer()
+            self.tf_listener = TransformListener(self.tf_buffer, self)
+            self.static_broadcaster = StaticTransformBroadcaster(self)
         self.marker_subscriptions = [
             self.create_subscription(
                 PoseStamped, f'tracking/aruco_single_{mid}/pose',
@@ -85,6 +107,49 @@ class TrackingNode(Node):
             return
         if calibrated:
             self.get_logger().info(f'Table calibration complete: {self.table_frame}')
+            if self.camera_tf_frame:
+                self.camera_tf_timer = self.create_timer(0.5, self.publish_camera_tf)
+                self.publish_camera_tf()
+
+    def publish_camera_tf(self):
+        """Attach the camera driver's TF root below the table once its tree is available."""
+        camera_frame = self.observations.camera_frame
+        if self.camera_tf_frame == camera_frame:
+            root_from_camera = np.eye(4)
+        else:
+            try:
+                tf = self.tf_buffer.lookup_transform(
+                    self.camera_tf_frame, camera_frame, Time()).transform
+            except TransformException as error:
+                self.get_logger().warning(
+                    f'Waiting for TF {self.camera_tf_frame} -> {camera_frame}: {error}',
+                    throttle_duration_sec=2.0)
+                return
+            root_from_camera = pose_matrix(
+                [tf.translation.x, tf.translation.y, tf.translation.z],
+                [tf.rotation.x, tf.rotation.y, tf.rotation.z, tf.rotation.w])
+        table_from_root = table_from_camera_root(
+            self.observations.camera_from_table, root_from_camera)
+        message = TransformStamped()
+        message.header.stamp = Time(
+            nanoseconds=self.observations.calibration_stamp_ns).to_msg()
+        message.header.frame_id = self.table_frame
+        message.child_frame_id = self.camera_tf_frame
+        x, y, z = (float(value) for value in table_from_root[:3, 3])
+        message.transform.translation.x = x
+        message.transform.translation.y = y
+        message.transform.translation.z = z
+        qx, qy, qz, qw = (float(value) for value in quaternion_from_matrix(table_from_root))
+        message.transform.rotation.x = qx
+        message.transform.rotation.y = qy
+        message.transform.rotation.z = qz
+        message.transform.rotation.w = qw
+        self.static_broadcaster.sendTransform(message)
+        if self.camera_tf_timer is not None:
+            self.camera_tf_timer.cancel()
+        self.get_logger().info(
+            f'Published TF {self.table_frame} -> {self.camera_tf_frame} '
+            f'(camera at {x:.3f}, {y:.3f}, {z:.3f} m)')
 
     def moving_callback(self, msg):
         """Publish each valid observation once, retaining its original measurement time."""

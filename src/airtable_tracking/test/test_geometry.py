@@ -1,6 +1,8 @@
 """Check geometric correctness with independent camera and vehicle ground truth."""
 
-from airtable_tracking.geometry import planar_base_pose, pose_matrix, register_markers
+from airtable_tracking.geometry import (
+    planar_base_pose, pose_matrix, register_markers, table_from_camera_root
+)
 import numpy as np
 import pytest
 from tf_transformations import quaternion_from_euler
@@ -27,6 +29,17 @@ def test_camera_and_mounting_do_not_change_vehicle_pose(camera_rpy, yaw):
     camera_from_marker = camera_from_table @ table_from_base @ base_from_marker
     result = planar_base_pose(calibrated, camera_from_marker, base_from_marker, 0.01)
     np.testing.assert_allclose(result, [0.4, 1.2, 0.01, yaw], atol=1e-12)
+
+
+def test_camera_root_pose_places_optical_frame_from_calibration():
+    """Chain table->camera_link->optical frame back to the calibrated optical pose."""
+    camera_from_table = pose_matrix([0.3, -0.5, 1.3], quaternion_from_euler(2.9, 0.1, -1.6))
+    # RealSense convention: camera_link x forward, optical z forward, x right, y down.
+    root_from_camera = pose_matrix([0.0, 0.015, 0.0],
+                                   quaternion_from_euler(-np.pi / 2, 0.0, -np.pi / 2))
+    table_from_root = table_from_camera_root(camera_from_table, root_from_camera)
+    np.testing.assert_allclose(
+        table_from_root @ root_from_camera, np.linalg.inv(camera_from_table), atol=1e-12)
 
 
 def test_calibration_uses_all_four_points():

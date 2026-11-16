@@ -1,0 +1,28 @@
+# Real I/O of airtable_hardware on Raspberry Pi 5. Pass it explicitly:
+#   ros2 launch airtable_bringup robot_hardware.launch.py \
+#     hardware_params:=package://airtable_bringup/config/hardware_pi.yaml
+# or name it in hardware.params of a robot configuration. Without it every backend is dummy.
+/**:
+  ros__parameters:
+    thrusters:
+      # gpio: Linux GPIO character device. The valves are normally closed; lines are driven
+      # low at start, at pulse end and at shutdown.
+      backend: gpio
+      # Empty: the 40-pin header is found by its chip label (pinctrl-rp1).
+      gpio_chip: ""
+      # BCM numbers of thruster_1..4 (C sample VALVE1..4). Wiring not verified on hardware.
+      gpio_lines: [19, 26, 20, 21]
+      # Longest single pulse; a longer command is shortened.
+      max_pulse_ms: 1000
+    rw:
+      # Set true only with an ARW-3m connected; the node refuses to start if it does not answer.
+      enabled: false
+      backend: arw3m
+      name: rw_1
+      i2c_bus: /dev/i2c-1
+      i2c_address: 0x60
+      # Same limits as the C sample rwtest.c (0.001 Nm, 6000 rpm). Not verified on hardware.
+      max_torque_nm: 0.001
+      speed_limit_rad_s: 628.3
+      command_timeout_ms: 500
+      update_period_ms: 20

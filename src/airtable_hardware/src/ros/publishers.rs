@@ -1,12 +1,12 @@
 use crate::devices::imu::ImuSample;
-use crate::devices::reaction_wheel::DebugWheelState;
+use crate::devices::reaction_wheel::WheelState;
 use airtable_interfaces::msg::ReactionWheelState;
 
 use rclrs::Time;
 use sensor_msgs::msg::Imu;
 use sensor_msgs::msg::JointState;
 
-pub fn debug_wheel_to_msg(state: DebugWheelState, stamp: Time) -> ReactionWheelState {
+pub fn wheel_state_to_msg(state: WheelState, stamp: Time) -> ReactionWheelState {
     let mut msg = ReactionWheelState::default();
     let (sec, nanosec) = stamp.to_sec_nanosec().expect("failed to convert ROS time");
     msg.stamp.sec = sec;

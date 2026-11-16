@@ -183,12 +183,32 @@ def _check_overrides(overrides, base, where):
                               f'{type(known[name]).__name__} in the referenced file')
 
 
-def load_robot_config(path, share=package_share):
+def _hardware(hardware, namespace, where, resolve):
+    """Resolve one robot's ``hardware`` section."""
+    imu_mount = hardware.get('imu_mount')
+    imu_frame = hardware.get('imu_frame', f'{namespace}/imu_link')
+    if not isinstance(imu_frame, str) or not imu_frame:
+        raise ConfigError(f'{where}.hardware.imu_frame must be a non-empty string')
+    return {
+        'params': None if hardware.get('params') is None else resolve(
+            hardware['params'], f'{where}.hardware.params'),
+        'imu_frame': imu_frame,
+        'imu_mount': None if imu_mount is None else _finite_list(
+            imu_mount, 6, f'{where}.hardware.imu_mount'),
+    }
+
+
+def load_robot_config(path, share=package_share, hardware_only=False):
     """
     Load and strictly validate a robot configuration; return resolved data.
 
     ``path`` is absolute, relative to the current directory, or
     ``package://<package>/<path>`` (e.g. package://airtable_bringup/config/robots/dual_robot.yaml).
+
+    ``hardware_only`` is for the Raspberry Pi, which installs only airtable_hardware and
+    airtable_bringup: keys are still checked, but the simulation model and the
+    controller/tracking parameter files (PC-only packages) are not resolved, and each
+    robot carries only namespace, table_frame, body_frame and hardware.
     """
     text = str(path)
     if text.startswith('package://'):
@@ -213,7 +233,7 @@ def load_robot_config(path, share=package_share):
 
     simulation = _mapping(raw.get('simulation'), 'simulation', SIMULATION_KEYS)
     model = resolve(simulation['model'], 'simulation.model') if simulation.get(
-        'model') is not None else None
+        'model') is not None and not hardware_only else None
     tables = {}
     for table, spec in _mapping(raw.get('tables'), 'tables').items():
         _name(table, 'tables key')
@@ -243,6 +263,15 @@ def load_robot_config(path, share=package_share):
             raise ConfigError(f'{where}: table {table!r} is already used by '
                               f'{seen_tables[table]}; one robot per table is supported')
         seen_tables[table] = namespace
+        if hardware_only:
+            robots.append({
+                'namespace': namespace,
+                'table_frame': table,
+                'body_frame': f'{namespace}/base_link',
+                'hardware': _hardware(_mapping(entry.get('hardware'), f'{where}.hardware',
+                                               HARDWARE_KEYS), namespace, where, resolve),
+            })
+            continue
         trajectory_path = resolve(entry.get('trajectory_params') or defaults.get(
             'trajectory_params') or DEFAULT_TRAJECTORY, f'{where}.trajectory_params')
         thruster_path = resolve(entry.get('thruster_params') or defaults.get(
@@ -294,7 +323,6 @@ def load_robot_config(path, share=package_share):
                 tracking.get('simulation_camera', LEGACY_SIM_CAMERA), table, where)
         elif tracking.get('simulation_camera') is not None:
             raise ConfigError(f'{where}.tracking.simulation_camera needs simulation_params')
-        imu_mount = hardware.get('imu_mount')
         robots.append({
             'namespace': namespace,
             'table_frame': table,
@@ -315,17 +343,10 @@ def load_robot_config(path, share=package_share):
                                       f'{where}.simulation.state_topic'),
             },
             'tracking': tracking_resolved,
-            'hardware': {
-                'params': None if hardware.get('params') is None else resolve(
-                    hardware['params'], f'{where}.hardware.params'),
-                'imu_frame': hardware.get('imu_frame', f'{namespace}/imu_link'),
-                'imu_mount': None if imu_mount is None else _finite_list(
-                    imu_mount, 6, f'{where}.hardware.imu_mount'),
-            },
+            'hardware': _hardware(hardware, namespace, where, resolve),
         })
-        if not isinstance(robots[-1]['hardware']['imu_frame'], str) or not robots[-1][
-                'hardware']['imu_frame']:
-            raise ConfigError(f'{where}.hardware.imu_frame must be a non-empty string')
+    if hardware_only:
+        return {'path': path, 'model': None, 'tables': tables, 'robots': robots}
     _check_tracking_ids(robots)
     for robot in robots:
         effective_trajectory(robot)  # validate merged bounds/trajectory early

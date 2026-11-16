@@ -30,7 +30,7 @@ impl DebugWheelConfig {
 }
 
 #[derive(Debug, Clone)]
-pub struct DebugWheelState {
+pub struct WheelState {
     pub name: String,
     pub angular_velocity: f64,
     pub commanded_torque: f64,
@@ -40,7 +40,7 @@ pub struct DebugWheelState {
 pub struct DebugReactionWheel {
     config: DebugWheelConfig,
     driver: ServoDriver,
-    state: DebugWheelState,
+    state: WheelState,
     last_command: Option<Instant>,
     last_update: Instant,
     faulted: bool,
@@ -57,7 +57,7 @@ impl DebugReactionWheel {
             "[hardware] {}: DEBUG SG90; RW feedback is VIRTUAL, not measured",
             config.name
         );
-        let state = DebugWheelState {
+        let state = WheelState {
             name: config.name.clone(),
             angular_velocity: 0.0,
             commanded_torque: 0.0,
@@ -87,7 +87,7 @@ impl DebugReactionWheel {
         Ok(())
     }
 
-    pub fn update(&mut self, now: Instant) -> Result<DebugWheelState, String> {
+    pub fn update(&mut self, now: Instant) -> Result<WheelState, String> {
         let dt = now.duration_since(self.last_update).as_secs_f64().min(0.1);
         self.last_update = now;
         if self

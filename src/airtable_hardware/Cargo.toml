@@ -10,3 +10,5 @@ airtable_interfaces = { path = "../../install/airtable_interfaces/share/airtable
 sensor_msgs = "*"
 trajectory_msgs = "*"
 signal-hook = "0.3"
+gpiocdev = "0.8"
+libc = "0.2"

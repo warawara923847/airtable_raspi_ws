@@ -115,6 +115,66 @@ ros2 topic pub --once /actuators/thrusters/pulse airtable_interfaces/msg/Thruste
 スラスタの実I/Oはスタブで、標準出力にログを出します。
 上記はhardware単体起動時のトピックです。bringup経由では先頭に `/robot_1` を付けます。
 
+### 7. Raspberry Pi 側のセットアップとビルド
+
+PC と Pi は同じリポジトリを使い、Pi では `airtable_interfaces` / `airtable_hardware` /
+`airtable_bringup` だけをビルドします（MuJoCo を含む `airtable_sim` や controller、
+tracking は PC 専用）。Pi 5・Ubuntu 24.04・`ros-jazzy-ros-base` で確認しています。
+
+`ros-base` には `rclrs` が無条件にリンクするパッケージが含まれないため、追加で導入します。
+Rust ツールチェーン・`uv sync`・`rust_packages` インデックスの復元は上記 2〜4 と同じです。
+
+```bash
+sudo apt-get install -y ros-jazzy-rosidl-generator-rs ros-jazzy-test-msgs \
+  ros-jazzy-example-interfaces i2c-tools
+```
+
+ビルドでは `AIRTABLE_BUILD_TARGET=pi` を設定します。`airtable_bringup/package.xml` の
+PC 専用パッケージへの依存がこの変数で外れ、bringup を単独でビルドできます
+（PC では設定しません）。
+
+```bash
+source /opt/ros/jazzy/setup.bash
+export PATH="$HOME/.cargo/bin:$PATH" AIRTABLE_BUILD_TARGET=pi
+./scripts/restore_rust_packages_index.sh
+.venv/bin/colcon build --symlink-install --packages-select airtable_interfaces
+source install/setup.bash
+.venv/bin/colcon build --symlink-install --packages-select airtable_hardware airtable_bringup
+source install/setup.bash
+ros2 launch airtable_bringup robot_hardware.launch.py
+```
+
+`robot_hardware.launch.py` は構成ファイルの `hardware` 節だけを解決するため
+（`load_robot_config(..., hardware_only=True)`）、sim モデルや controller / tracking の
+パラメータファイルが Pi に無くても起動します。PC と Pi は同一 LAN・同一
+`ROS_DOMAIN_ID`（既定 0）で、PC からは `/robot_1/actuators/thrusters/pulse` などが見えます。
+既定では全ての I/O がダミーで、実出力はありません。
+
+#### 実I/O（バルブの GPIO、RW ARW-3m）
+
+実I/Oはパラメータファイルで明示したときだけ有効になります。
+
+```bash
+ros2 launch airtable_bringup robot_hardware.launch.py \
+  hardware_params:=package://airtable_bringup/config/hardware_pi.yaml
+```
+
+| 対象 | パラメータ | 内容 |
+|---|---|---|
+| スラスタバルブ | `thrusters.backend: gpio` | GPIO character device。`thrusters.gpio_lines` は thruster_1〜4 の BCM 番号（既定 19/26/20/21） |
+| RW | `rw.enabled: true`、`rw.backend: arw3m` | ASPINA ARW-3m（I2C、既定 `/dev/i2c-1` の 0x60）。応答が無ければ起動を拒否 |
+
+- バルブは常閉として扱い、起動時・パルス終了時・ノード終了時に Low にします。
+  パルス長は Pi 側で計時し、`thrusters.max_pulse_ms` を超える指令は短縮します。
+- GPIO は `gpio` グループ（Pi 5 の Ubuntu では `/dev/gpiochip4` が `dialout`）、
+  I2C は `i2c` グループの権限で動きます。sudo は不要です。
+- Pi の実ピン（未配線）とユニットテストで検証済みで、バルブ・RW の実機は未接続です。
+  ARW-3m の実装は C サンプルと送信バイト列が一致することまで確認しています。
+- 実ピンの確認: `cd src/airtable_hardware && AIRTABLE_TEST_GPIO_LINE=19 cargo test -- --ignored real_gpio`
+
+設計判断と検証値は
+[0016. Raspberry Pi 向けビルド分離と実I/O](docs/adr/0016-pi-build-and-real-io.md)。
+
 ## パッケージ構成
 
 | パッケージ | 言語 | 役割 | 状況 |
@@ -548,6 +608,23 @@ ros2 launch airtable_tracking tracking.launch.py start_camera:=true
 - `base_height`: 平面運動として出力するbase_linkの高さ[m]です。
   シミュレータの現モデルと合わせる場合は0.01 m、マーカー高さとは別の値です。
 - `pose_covariance_diagonal`: テーブル座標系での観測分散です。実機で調整してください。
+- `camera_tf_frame`: 校正後、カメラドライバのTFの根（`camera_link`）を
+  `table_frame` の子として静的TFで配信します。RVizでカメラがテーブル上方から
+  見下ろす姿勢で表示されます。シミュレータがカメラTFを出す場合は空文字で無効にします。
+  RealSenseの規約では `camera_link` は+xがレンズ方向で、光学座標系は+zがレンズ方向です。
+- `table_size`: テーブル範囲 [x, y] [m]（既定1 × 2 m）。`marker_size` とともにRViz表示に使います。
+
+実機の表示は `robot_tracking.launch.py start_camera:=true rviz:=true` で起動します
+（`rviz/tracking_real.rviz`、実時間）。`/robot_1/tracking/layout`（MarkerArray、
+Transient Local）が設定どおりのテーブル枠（青）と固定マーカーの既知位置・ID（黄）を出し、
+aruco_rosの検出TF `robot_1/aruco_marker_<ID>` の軸と重ねて校正のずれを確認できます。
+緑の矢印は `measurements/external_pose`、右下はinfra1画像です。
+
+実機の現在の固定マーカーは、テーブル角（ID 12側）を原点、12→13を+x、12→10を+yとし、
+0.15 mカードを1 m × 2 mテーブルの四隅に寄せた中心座標です。
+4点は同一平面なので、鏡映の順序でも校正は通りますがz軸とyawの符号が反転します。
+シミュレータのカードも同じ配置です。検出条件の切り分けと検証値は
+[0017. 実機RealSenseでの固定マーカー検出とテーブル座標配置](docs/adr/0017-real-camera-marker-layout.md)。
 
 別の設定ファイルは `params_file:=/absolute/path/tracking.yaml` で指定できます。
 物理カメラをすでに起動している場合は `start_camera:=false`（既定値）、仮想の
@@ -563,7 +640,13 @@ ros2 launch airtable_tracking tracking.launch.py start_camera:=true
 ```
 
 画像トピックは `image_topic` / `camera_info_topic`、入力座標系は `camera_frame` で
-変更できます。画像はrectified画像を前提とします。出力は元の画像の観測時刻を保持し、
+変更できます。RealSenseは旧 `airtable_ws` の設定に合わせ、infra1を
+`camera_profile:=848x480x90`、エミッタ無効、手動露出 `camera_exposure:=5000` [µs]、
+`camera_gain:=20` で起動します。自動露出では光沢のある固定マーカー1枚が白飛びし、
+640x480では視野が狭くなり取りこぼしました。露出はフレーム周期（90 Hzで約11 ms）内に収めます。
+`aruco_ros` の `min_marker_size` は既定0.0です
+（0.02では1280x720で見えている約40 pxのマーカーを検出しませんでした）。
+旧設定の `corner_refinement` はaruco_ros 5で宣言されないパラメータのため指定しません。画像はrectified画像を前提とします。出力は元の画像の観測時刻を保持し、
 位置・姿勢を変換して取り付け位置を補正した後、平面Poseに射影します。
 欠測中は新しいPoseを出さず、重複・順序逆転した可動マーカー観測も出力しません。
 固定点は同一フレーム・指定時間幅内で全点が揃い、配置残差が閾値以下の場合だけ採用します。

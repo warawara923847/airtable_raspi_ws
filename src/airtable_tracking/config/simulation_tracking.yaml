@@ -4,11 +4,12 @@
     table_frame: table_1
     fixed_marker_ids: [10, 11, 12, 13]
     moving_marker_id: 50
-    # Centers of the printed top faces in airtable_sim/mujoco/airtable.xml [m].
-    fixed_marker_positions: [0.12, 0.12, 0.002,
-                            0.88, 0.12, 0.002,
-                            0.12, 1.88, 0.002,
-                            0.88, 1.88, 0.002]
+    # Centers of the printed top faces in airtable_sim/mujoco/airtable.xml [m]. Same layout
+    # as the hardware (tracking.yaml): ID 12 at the origin corner, 12->13 +x, 12->10 +y.
+    fixed_marker_positions: [0.075, 1.925, 0.002,   # 10
+                             0.925, 1.925, 0.002,   # 11
+                             0.075, 0.075, 0.002,   # 12
+                             0.925, 0.075, 0.002]   # 13
     base_to_marker_translation: [0.0, 0.0, 0.147]
     base_to_marker_rpy: [0.0, 0.0, 0.0]
     base_height: 0.01

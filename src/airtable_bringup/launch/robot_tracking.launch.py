@@ -3,6 +3,7 @@ Hardware observation input for one configured robot (camera, ArUco, Pose adapter
 
 - ros2 launch airtable_bringup robot_tracking.launch.py
   robot_config:=<.../dual_robot.yaml> robot:=robot_1 start_camera:=false
+- ros2 launch airtable_bringup robot_tracking.launch.py start_camera:=true rviz:=true
 
 Output: /<robot>/measurements/external_pose (PoseWithCovarianceStamped in the
 robot's table frame). It is an observation, not the controller's Odometry input:
@@ -24,6 +25,7 @@ ARGUMENTS = [
     ('robot', '', 'Robot to observe; required with several robots'),
     ('start_camera', 'false', 'Start the RealSense configured for this robot'),
     ('start_detectors', 'true', 'Start ArUco detectors'),
+    ('rviz', 'false', 'Open RViz (rviz/tracking_real.rviz: table area, markers, camera)'),
 ]
 REQUIRED = ('params', 'camera_frame', 'image_topic', 'camera_info_topic', 'marker_size')
 
@@ -56,7 +58,7 @@ def setup(context):
     parts = tracking['image_topic'].strip('/').split('/')
     camera_namespace, camera_name = (parts[0], parts[1]) if len(parts) >= 4 else (
         'camera', 'camera')
-    return [IncludeLaunchDescription(
+    actions = [IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([
             FindPackageShare('airtable_tracking'), 'launch', 'tracking.launch.py'])),
         launch_arguments={
@@ -72,6 +74,17 @@ def setup(context):
             'camera_serial_no': "''" if serial in (None, '') else f"'{serial}'",
             'camera_name': camera_name, 'camera_namespace': camera_namespace,
         }.items())]
+    if args['rviz'].lower() == 'true':
+        # The config names robot_1 and the default RealSense topics/frames.
+        actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution([
+                FindPackageShare('airtable_bringup'), 'launch', 'rviz.launch.py'])),
+            launch_arguments={
+                'use_sim_time': 'false',
+                'rviz_config': PathJoinSubstitution([
+                    FindPackageShare('airtable_bringup'), 'rviz', 'tracking_real.rviz']),
+            }.items()))
+    return actions
 
 
 def generate_launch_description():

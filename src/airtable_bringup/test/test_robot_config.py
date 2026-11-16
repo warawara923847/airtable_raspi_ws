@@ -40,6 +40,24 @@ class RobotConfigTest(unittest.TestCase):
     def load(self, name):
         return rc.load_robot_config(CONFIGS / name, share)
 
+    def test_hardware_only_needs_no_pc_packages(self):
+        """The Pi resolves only the hardware section; PC-only packages may be absent."""
+        def no_share(package):
+            raise rc.ConfigError(f'package://{package}: package not found')
+
+        for name in ('single_robot.yaml', 'dual_robot.yaml'):
+            full = self.load(name)
+            pi = rc.load_robot_config(CONFIGS / name, no_share, hardware_only=True)
+            self.assertIsNone(pi['model'])
+            for robot, expected in zip(pi['robots'], full['robots']):
+                self.assertEqual(set(robot), {
+                    'namespace', 'table_frame', 'body_frame', 'hardware'})
+                for key in robot:
+                    self.assertEqual(robot[key], expected[key])
+        with self.assertRaises(rc.ConfigError):
+            rc.load_robot_config(self.write(self.dual_text(
+                'hardware: {imu_mount: [0, 0]}')), no_share, hardware_only=True)
+
     def write(self, text, name='robots.yaml'):
         path = self.dir / name
         path.write_text(textwrap.dedent(text))
@@ -276,7 +294,7 @@ class RobotConfigTest(unittest.TestCase):
         model_error(text(camera='table_1/tracking_camera'), "is on 'table_1'")
         model_error(text(camera='tracking_camera'), "camera 'tracking_camera'")
         shifted = self.dir / 'shifted.yaml'
-        shifted.write_text(sim_2.read_text().replace('0.88, 1.88, 0.002', '0.86, 1.88, 0.002'))
+        shifted.write_text(sim_2.read_text().replace('0.925, 0.075, 0.002', '0.905, 0.075, 0.002'))
         model_error(text(params=shifted), 'marker_23 on table_2 is at')
         other = self.dir / 'other_ids.yaml'
         other.write_text(sim_2.read_text().replace('moving_marker_id: 51',

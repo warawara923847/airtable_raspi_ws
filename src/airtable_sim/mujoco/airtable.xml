@@ -42,13 +42,13 @@
 
             <!-- Card size 0.15 m includes a white margin; black marker edge is 0.10 m. -->
             <geom name="fixed_marker_10" type="mesh" mesh="marker_card" material="marker_10"
-                  pos="0.12 0.12 0.002" mass="0" contype="0" conaffinity="0"/>
+                  pos="0.075 1.925 0.002" mass="0" contype="0" conaffinity="0"/>
             <geom name="fixed_marker_11" type="mesh" mesh="marker_card" material="marker_11"
-                  pos="0.88 0.12 0.002" mass="0" contype="0" conaffinity="0"/>
+                  pos="0.925 1.925 0.002" mass="0" contype="0" conaffinity="0"/>
             <geom name="fixed_marker_12" type="mesh" mesh="marker_card" material="marker_12"
-                  pos="0.12 1.88 0.002" mass="0" contype="0" conaffinity="0"/>
+                  pos="0.075 0.075 0.002" mass="0" contype="0" conaffinity="0"/>
             <geom name="fixed_marker_13" type="mesh" mesh="marker_card" material="marker_13"
-                  pos="0.88 1.88 0.002" mass="0" contype="0" conaffinity="0"/>
+                  pos="0.925 0.075 0.002" mass="0" contype="0" conaffinity="0"/>
 
         <!-- 外枠 -->
             <geom

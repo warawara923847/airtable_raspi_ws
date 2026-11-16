@@ -20,7 +20,8 @@ use sensor_msgs::msg::Imu;
 use sensor_msgs::msg::JointState;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // rclrs 0.7 has no signal handler. Return normally so PWM Drop can disable output.
+    // rclrs 0.7 has no signal handler. Return normally so the Drop of each output
+    // (valves closed, PWM disabled, RW stopped) runs.
     let stopping = Arc::new(AtomicBool::new(false));
     for signal in [signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM] {
         signal_hook::flag::register(signal, Arc::clone(&stopping))?;
@@ -31,10 +32,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let node = executor.create_node("airtable_hardware")?;
 
-    let rw_parameters = ros::parameters::DebugWheelParameters::declare(&node)?;
+    let rw_parameters = ros::parameters::WheelParameters::declare(&node)?;
     let reaction_wheel = rw_parameters.create_wheel()?;
     let rw_enabled = reaction_wheel.is_some();
-    let hardware = node.create_worker(HardwareState::new(reaction_wheel));
+    let thruster_parameters = ros::parameters::ThrusterParameters::declare(&node)?;
+    let thrusters = thruster_parameters.create_thrusters()?;
+    let hardware = node.create_worker(HardwareState::new(thrusters, reaction_wheel));
 
     let (_rw_subscription, _rw_timer) = if rw_enabled {
         let subscription = hardware.create_subscription(
@@ -52,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .update_reaction_wheel()
             {
                 Ok(Some(state)) => {
-                    let msg = ros::publishers::debug_wheel_to_msg(state, clock.now());
+                    let msg = ros::publishers::wheel_state_to_msg(state, clock.now());
                     if let Err(error) = publisher.publish(msg) {
                         eprintln!("[ros] RW state publish failed: {error}");
                     }
@@ -71,8 +74,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ros::subscribers::handle_thruster_pulse,
     )?;
 
+    // This period bounds how late a pulse is closed. At 5 ms a 10 ms pulse was closed
+    // 3 ms late on average on the Pi 5 (+30 % impulse).
     let _thruster_update_timer = hardware.create_timer_repeating(
-        Duration::from_millis(5),
+        Duration::from_millis(1),
         move |hardware: &mut HardwareState, _now: rclrs::Time| {
             if let Err(error) = hardware.update_thrusters() {
                 eprintln!("[hardware] thruster update failed: {}", error);

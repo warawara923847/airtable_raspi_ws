@@ -2,17 +2,23 @@
   ros__parameters:
     camera_frame: camera_infra1_optical_frame
     table_frame: table_1
+    # RealSense TF root, attached below table_frame after calibration ('' = off).
+    camera_tf_frame: camera_link
+    # Table area [x_m, y_m] from the table_1 origin, drawn in RViz (tracking/layout).
+    table_size: [1.0, 2.0]
     fixed_marker_ids: [10, 11, 12, 13]
     moving_marker_id: 50
-    # Example layout in table_1 [m], XYZ for each ID in the order above.
-    # Replace with measured marker CENTERS, not the table's outer dimensions.
-    fixed_marker_positions: [0.0, 0.0, 0.0,
-                             1.0, 0.0, 0.0,
-                             0.0, 2.0, 0.0,
-                             1.0, 2.0, 0.0]
+    # Marker CENTERS in table_1 [m], XYZ for each ID in the order above. Origin at the
+    # table corner next to ID 12; +x 12->13 (short side), +y 12->10 (long side), +z up.
+    # 0.15 m cards flush with the corners of a 1 m x 2 m table. A mirrored order still
+    # calibrates (coplanar points) but flips z and the yaw sign.
+    fixed_marker_positions: [0.075, 1.925, 0.002,   # 10
+                             0.925, 1.925, 0.002,   # 11
+                             0.075, 0.075, 0.002,   # 12
+                             0.925, 0.075, 0.002]   # 13
     # T_base_marker: marker origin and orientation expressed in base_link.
     # RPY in radians; use the marker frame convention reported by aruco_ros.
-    base_to_marker_translation: [0.0, 0.0, 0.147]
+    base_to_marker_translation: [0.0, 0.0, 0.2]
     base_to_marker_rpy: [0.0, 0.0, 0.0]
     # Planar base_link height in the table frame, not the marker height.
     base_height: 0.0
