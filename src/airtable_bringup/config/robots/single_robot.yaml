@@ -34,7 +34,11 @@ robots:
       marker_size: 0.1
       camera_serial_no: null  # not recorded yet
     hardware:
+      # Valves stay dummy until their wiring is verified; hardware_pi.yaml enables GPIO.
       params: null
-      # Default keeps the legacy frame used by manual_control.launch.py.
+      # Reaction wheel on the real robot: none | arw3m | sg90hv (stand-in until the
+      # ARW-3m works). Picks the Pi's wheel parameters and the PC's manual RW control.
+      rw: sg90hv
+      # Default keeps the legacy single-robot frame.
       imu_frame: imu_link
       imu_mount: null  # base_link -> IMU [x,y,z,roll,pitch,yaw]; not measured

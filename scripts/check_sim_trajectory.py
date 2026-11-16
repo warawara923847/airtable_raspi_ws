@@ -87,7 +87,7 @@ def check_trajectory(args, kind, log_dir):
             rclpy.spin_once(node, timeout_sec=0.05)
         require(all(sub.get_publisher_count() == 0 for sub in subscriptions),
                 'Test ROS domain is occupied; use another --domain-id')
-        command = ['ros2', 'launch', 'airtable_bringup', 'simulation_trajectory.launch.py',
+        command = ['ros2', 'launch', 'airtable_bringup', 'trajectory.launch.py',
                    f'trajectory:={kind}', 'viewer:=false', 'state_topic:=check/state',
                    f'fixed_yaw:={args.fixed_yaw}', f'period:={args.period}']
         if args.radius is not None:

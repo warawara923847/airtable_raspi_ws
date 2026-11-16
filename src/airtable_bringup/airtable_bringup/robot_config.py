@@ -57,7 +57,18 @@ TRACKING_KEYS = {'params', 'simulation_params', 'simulation_camera', 'camera_fra
 LEGACY_SIM_CAMERA = 'tracking_camera'
 # Black edge of the ArUco cards in the MJCF models (markers/card.obj).
 SIM_MARKER_SIZE = 0.1
-HARDWARE_KEYS = {'params', 'imu_frame', 'imu_mount'}
+HARDWARE_KEYS = {'params', 'imu_frame', 'imu_mount', 'rw', 'rw_params'}
+# Reaction wheel fitted to the real robot. It selects both the Pi's airtable_hardware
+# parameters (rw_params, layered over params) and the PC's manual RW control:
+#   none   - no wheel
+#   arw3m  - torque-commanded ARW-3m with telemetry (airtable_controller_node speed loop)
+#   sg90hv - continuous-rotation servo, speed-commanded (airtable_rw_attitude_node)
+# The simulator always models a torque wheel, so this does not affect plant:=sim.
+RW_TYPES = ('none', 'arw3m', 'sg90hv')
+RW_DEFAULT_PARAMS = {
+    'arw3m': 'package://airtable_bringup/config/arw3m.yaml',
+    'sg90hv': 'package://airtable_bringup/config/sg90hv.yaml',
+}
 
 
 class ConfigError(ValueError):
@@ -189,12 +200,23 @@ def _hardware(hardware, namespace, where, resolve):
     imu_frame = hardware.get('imu_frame', f'{namespace}/imu_link')
     if not isinstance(imu_frame, str) or not imu_frame:
         raise ConfigError(f'{where}.hardware.imu_frame must be a non-empty string')
+    rw = hardware.get('rw', 'none')
+    if rw not in RW_TYPES:
+        raise ConfigError(f'{where}.hardware.rw must be one of {list(RW_TYPES)}, got {rw!r}')
+    rw_params = hardware.get('rw_params')
+    if rw == 'none' and rw_params is not None:
+        raise ConfigError(f'{where}.hardware.rw_params needs hardware.rw')
+    if rw_params is None:
+        rw_params = RW_DEFAULT_PARAMS.get(rw)
     return {
         'params': None if hardware.get('params') is None else resolve(
             hardware['params'], f'{where}.hardware.params'),
         'imu_frame': imu_frame,
         'imu_mount': None if imu_mount is None else _finite_list(
             imu_mount, 6, f'{where}.hardware.imu_mount'),
+        'rw': rw,
+        'rw_params': None if rw_params is None else resolve(
+            rw_params, f'{where}.hardware.rw_params'),
     }
 
 

@@ -74,7 +74,7 @@ def main():
     control_client = node.create_client(GetParameters,
                                         '/robot_1/airtable_trajectory_controller/get_parameters')
     sim_client = node.create_client(GetParameters, '/airtable_sim/get_parameters')
-    command = ['ros2', 'launch', 'airtable_bringup', 'simulation_trajectory.launch.py',
+    command = ['ros2', 'launch', 'airtable_bringup', 'trajectory.launch.py',
                'trajectory:=circle', f'radius:={args.radius}',
                f'viewer:={str(args.viewer).lower()}', f'rviz:={str(args.rviz).lower()}',
                f'tracking:={str(args.tracking).lower()}']
@@ -109,13 +109,14 @@ def main():
             center = list(params[1].double_array_value)
             require(center == [0.5, 1.0], f'Wrong circle center: {center}')
             future = sim_client.call_async(GetParameters.Request(names=[
-                'enable_camera', 'initial_pose']))
+                'enable_camera', 'initial_pose_vehicles', 'initial_poses']))
             spin_until(future.done, process)
             params = future.result().values
             require(params[0].bool_value == args.tracking, 'Camera setting mismatch')
             expected = [0.5 + args.radius, 1.0, 0.0] if args.initial_x is None else [
                 args.initial_x, args.initial_y, args.initial_yaw]
-            require(np.allclose(params[1].double_array_value, expected), 'Wrong initial pose')
+            require(list(params[1].string_array_value) == ['robot_1'], 'Wrong initial pose robot')
+            require(np.allclose(params[2].double_array_value, expected), 'Wrong initial pose')
             initial = records['truth'][0][1].pose.pose.position
             require(np.linalg.norm(np.array([initial.x, initial.y]) - expected[:2]) < 1e-4,
                     'Initial truth differs from requested pose')

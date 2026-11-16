@@ -43,6 +43,9 @@ class RobotConfigTest(unittest.TestCase):
     def test_hardware_only_needs_no_pc_packages(self):
         """The Pi resolves only the hardware section; PC-only packages may be absent."""
         def no_share(package):
+            # The Pi installs airtable_hardware and airtable_bringup only.
+            if package in ('airtable_bringup', 'airtable_hardware'):
+                return share(package)
             raise rc.ConfigError(f'package://{package}: package not found')
 
         for name in ('single_robot.yaml', 'dual_robot.yaml'):
@@ -54,9 +57,29 @@ class RobotConfigTest(unittest.TestCase):
                     'namespace', 'table_frame', 'body_frame', 'hardware'})
                 for key in robot:
                     self.assertEqual(robot[key], expected[key])
-        with self.assertRaises(rc.ConfigError):
+        with self.assertRaisesRegex(rc.ConfigError, 'imu_mount must be a list of 6'):
             rc.load_robot_config(self.write(self.dual_text(
-                'hardware: {imu_mount: [0, 0]}')), no_share, hardware_only=True)
+                '    hardware: {imu_mount: [0, 0]}')), no_share, hardware_only=True)
+
+    def test_reaction_wheel_type_selects_the_wheel_parameters(self):
+        """hardware.rw picks a default wheel file; none needs none; typos are rejected."""
+        single = self.load('single_robot.yaml')['robots'][0]['hardware']
+        self.assertEqual(single['rw'], 'sg90hv')
+        self.assertEqual(single['rw_params'], PACKAGE / 'config' / 'sg90hv.yaml')
+        for robot in self.load('dual_robot.yaml')['robots']:
+            self.assertEqual((robot['hardware']['rw'], robot['hardware']['rw_params']),
+                             ('none', None))
+        arw3m = rc.load_robot_config(self.write(self.dual_text(
+            '    hardware: {rw: arw3m}')), share)['robots'][1]['hardware']
+        self.assertEqual(arw3m['rw_params'], PACKAGE / 'config' / 'arw3m.yaml')
+        (self.dir / 'wheel.yaml').write_text('/**:\n  ros__parameters: {}\n')
+        custom = rc.load_robot_config(self.write(self.dual_text(
+            '    hardware: {rw: sg90hv, rw_params: wheel.yaml}')), share)['robots'][1]['hardware']
+        self.assertEqual(custom['rw_params'], self.dir / 'wheel.yaml')
+        for extra, fragment in [('    hardware: {rw: sg90}', 'hardware.rw must be one of'),
+                                ('    hardware: {rw_params: wheel.yaml}', 'needs hardware.rw')]:
+            with self.assertRaisesRegex(rc.ConfigError, fragment):
+                rc.load_robot_config(self.write(self.dual_text(extra)), share)
 
     def write(self, text, name='robots.yaml'):
         path = self.dir / name

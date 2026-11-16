@@ -45,10 +45,8 @@ def main():
     parser.add_argument('--viewer', action='store_true', help='Also exercise the MuJoCo window')
     parser.add_argument('--control', action='store_true', help='Include joystick/control nodes')
     args = parser.parse_args()
-    launch_file = (
-        'simulation_control.launch.py' if args.control else 'simulation_tracking.launch.py'
-    )
-    launch_args = ['tracking:=true'] if args.control else []
+    launch_file = 'manual.launch.py'
+    launch_args = ['tracking:=true', f'start_joy:={str(args.control).lower()}']
     with tempfile.NamedTemporaryFile(
         prefix='airtable_sim_tracking_', suffix='.log', delete=False
     ) as log:

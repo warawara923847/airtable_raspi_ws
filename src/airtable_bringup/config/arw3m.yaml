@@ -1,0 +1,16 @@
+# airtable_hardware: ARW-3m reaction wheel over I2C (docs/adr/0016).
+# Selected by hardware.rw: arw3m of the robot configuration. The node refuses to start
+# if the wheel does not answer.
+/**:
+  ros__parameters:
+    rw:
+      enabled: true
+      backend: arw3m
+      name: rw_1
+      i2c_bus: /dev/i2c-1
+      i2c_address: 0x60
+      # Same limits as the C sample rwtest.c (0.001 Nm, 6000 rpm). Not verified on hardware.
+      max_torque_nm: 0.001
+      speed_limit_rad_s: 628.3
+      command_timeout_ms: 500
+      update_period_ms: 20

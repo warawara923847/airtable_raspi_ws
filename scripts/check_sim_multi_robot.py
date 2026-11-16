@@ -226,10 +226,10 @@ def require_tracking(name, report, cycles, period):
     require(max(report['xy_extent_m']) > 0.15, f'{name}: did not traverse the trajectory')
 
 
-def launch(config, log_dir, label, *extra, file='simulation_robots.launch.py'):
+def launch(config, log_dir, label, *extra, file='trajectory.launch.py'):
     """Command line for a bringup launch with a robot configuration."""
     command = ['ros2', 'launch', 'airtable_bringup', file, f'robot_config:={config}', *extra]
-    if file == 'simulation_robots.launch.py':
+    if file == 'trajectory.launch.py' and 'plant:=real' not in extra:
         command.append('viewer:=false')
     (log_dir / f'{label}.command').write_text(' '.join(command) + '\n')
     return command
@@ -699,9 +699,9 @@ def check_split_launch(log_dir, domain):
     try:
         session.require_free_domain()
         config = CONFIGS / 'dual_robot.yaml'
-        pc = launch(config, log_dir, 'pc', file='robots_trajectory_control.launch.py')
+        pc = launch(config, log_dir, 'pc', 'plant:=real')
         pis = {name: launch(config, log_dir, f'pi_{name}', f'robot:={name}',
-                            file='robot_hardware.launch.py') for name in names}
+                            file='hardware.launch.py') for name in names}
         with running(pc, log_dir, 'pc') as p0, \
                 running(pis['robot_1'], log_dir, 'pi_robot_1') as p1, \
                 running(pis['robot_2'], log_dir, 'pi_robot_2') as p2:
@@ -769,22 +769,26 @@ def check_launch_errors(log_dir):
         text = text.replace(line, '')
     untracked.write_text(text)
     cases = [
-        (['robot_hardware.launch.py', f'robot_config:={dual}'], 'robot:= is required'),
-        (['robot_hardware.launch.py', f'robot_config:={dual}', 'robot:=robot_3'],
+        (['hardware.launch.py', f'robot_config:={dual}'], 'robot:= is required'),
+        (['hardware.launch.py', f'robot_config:={dual}', 'robot:=robot_3'],
          'unknown robots'),
-        (['simulation_robots.launch.py', f'robot_config:={untracked}', 'tracking:=true'],
+        (['trajectory.launch.py', f'robot_config:={untracked}', 'tracking:=true'],
          "['robot_2'] have no tracking.simulation_params"),
-        (['simulation_robots.launch.py', f'robot_config:={dual}', 'disturbance:=true'],
+        (['trajectory.launch.py', f'robot_config:={dual}', 'disturbance:=true'],
          'disturbance_robot'),
-        (['simulation_robots.launch.py', f'robot_config:={dual}', 'initial_x:=1.2',
+        (['trajectory.launch.py', f'robot_config:={dual}', 'initial_x:=1.2',
           'initial_y:=1.0'], 'outside position_bounds_m'),
-        (['simulation_robots.launch.py', f'robot_config:={CONFIGS / "single_robot.yaml"}',
+        (['trajectory.launch.py', f'robot_config:={CONFIGS / "single_robot.yaml"}',
           f'model_path:={ROOT / "src/airtable_sim/mujoco/airtable_robot_2.xml"}'],
          "vehicle body 'robot_1' not found"),
-        (['robot_tracking.launch.py', f'robot_config:={dual}', 'robot:=robot_2'],
+        (['tracking.launch.py', f'robot_config:={dual}', 'robot:=robot_2'],
          'not configured'),
-        (['robots_trajectory_control.launch.py', f'robot_config:={log_dir / "missing.yaml"}'],
-         'robot configuration not found'),
+        (['trajectory.launch.py', 'plant:=real',
+          f'robot_config:={log_dir / "missing.yaml"}'], 'robot configuration not found'),
+        (['trajectory.launch.py', 'plant:=real', f'robot_config:={dual}', 'initial_x:=0.5'],
+         'only apply to plant:=sim'),
+        (['manual.launch.py', f'robot_config:={dual}'], 'robot:= is required'),
+        (['manual.launch.py', 'plant:=simulation'], 'plant must be one of'),
     ]
     for index, (arguments, fragment) in enumerate(cases):
         output = subprocess.run(['ros2', 'launch', 'airtable_bringup', *arguments],

@@ -44,13 +44,13 @@ ros2 run airtable_bringup experiment_bag record \
   --snapshot src/airtable_controller/config/trajectory.yaml \
   --snapshot src/airtable_controller/config/thrusters.yaml \
   --snapshot src/airtable_sim/mujoco/airtable.xml \
-  --snapshot src/airtable_bringup/launch/simulation_trajectory.launch.py
+  --snapshot src/airtable_bringup/launch/trajectory.launch.py
 ```
 
 トピックを探索し続けるため、simより先に録画を起動できます。ターミナル②で実験を開始します。
 
 ```bash
-ros2 launch airtable_bringup simulation_trajectory.launch.py \
+ros2 launch airtable_bringup trajectory.launch.py \
   trajectory:=circle radius:=0.20 period:=20.0 viewer:=false
 ```
 

@@ -141,28 +141,31 @@ export PATH="$HOME/.cargo/bin:$PATH" AIRTABLE_BUILD_TARGET=pi
 source install/setup.bash
 .venv/bin/colcon build --symlink-install --packages-select airtable_hardware airtable_bringup
 source install/setup.bash
-ros2 launch airtable_bringup robot_hardware.launch.py
+ros2 launch airtable_bringup hardware.launch.py
 ```
 
-`robot_hardware.launch.py` は構成ファイルの `hardware` 節だけを解決するため
+`hardware.launch.py` は構成ファイルの `hardware` 節だけを解決するため
 （`load_robot_config(..., hardware_only=True)`）、sim モデルや controller / tracking の
 パラメータファイルが Pi に無くても起動します。PC と Pi は同一 LAN・同一
 `ROS_DOMAIN_ID`（既定 0）で、PC からは `/robot_1/actuators/thrusters/pulse` などが見えます。
-既定では全ての I/O がダミーで、実出力はありません。
+バルブは既定でダミーです。RWは構成ファイルの `hardware.rw` で決まり、
+`single_robot.yaml` は現在の実機に合わせて `sg90hv`（SG90-HVの代用RW）です。
 
-#### 実I/O（バルブの GPIO、RW ARW-3m）
+#### 実I/O（バルブの GPIO、RW）
 
-実I/Oはパラメータファイルで明示したときだけ有効になります。
+バルブの実I/Oはパラメータファイルで明示したときだけ有効になります。
+RWは `hardware.rw`（`none` / `arw3m` / `sg90hv`）に対応する `config/arw3m.yaml` /
+`config/sg90hv.yaml` がその上に重なります。
 
 ```bash
-ros2 launch airtable_bringup robot_hardware.launch.py \
+ros2 launch airtable_bringup hardware.launch.py \
   hardware_params:=package://airtable_bringup/config/hardware_pi.yaml
 ```
 
 | 対象 | パラメータ | 内容 |
 |---|---|---|
 | スラスタバルブ | `thrusters.backend: gpio` | GPIO character device。`thrusters.gpio_lines` は thruster_1〜4 の BCM 番号（既定 19/26/20/21） |
-| RW | `rw.enabled: true`、`rw.backend: arw3m` | ASPINA ARW-3m（I2C、既定 `/dev/i2c-1` の 0x60）。応答が無ければ起動を拒否 |
+| RW | `hardware.rw: arw3m`（`config/arw3m.yaml`） | ASPINA ARW-3m（I2C、既定 `/dev/i2c-1` の 0x60）。応答が無ければ起動を拒否 |
 
 - バルブは常閉として扱い、起動時・パルス終了時・ノード終了時に Low にします。
   パルス長は Pi 側で計時し、`thrusters.max_pulse_ms` を超える指令は短縮します。
@@ -222,10 +225,38 @@ bringupではteleop / controller / hardwareを `robot_1` 名前空間に揃え�
 
 ### 起動
 
+`airtable_bringup` の入口は用途と動かす場所で5本です。PC側の `manual` / `trajectory` は
+`plant:=sim|real` でシミュレーションと実機を切り替えます（既定 `sim`）。
+機体・テーブル・RWの種類はどれも構成ファイル（`robot_config:=`、既定
+`config/robots/single_robot.yaml`）から決まります。
+設計判断は [0019. launchを用途と実行場所で整理する](docs/adr/0019-launch-entry-points.md)。
+
+| launch | 場所 | 内容 |
+|---|---|---|
+| `manual.launch.py` | PC | ゲームパッドで1機を手動操縦。`plant:=sim` はMuJoCoも起動。`tracking:=true` でArUco観測 |
+| `trajectory.launch.py` | PC | 姿勢固定の軌道追従（1基／2基）。sim固有の引数（初期姿勢・外乱・viewer等）は `plant:=sim` のみ |
+| `hardware.launch.py` | Pi | 自機の `airtable_hardware` だけ。`plant:=real` の相手側 |
+| `tracking.launch.py` | PC | 実カメラの観測だけ（校正・マーカー確認用） |
+| `rviz.launch.py` | PC | 起動済みのsim／実機にRVizを接続 |
+
 ```bash
-ros2 launch airtable_bringup simulation_control.launch.py   # シミュレーション
-ros2 launch airtable_bringup manual_control.launch.py       # 実機
+ros2 launch airtable_bringup manual.launch.py                  # シミュレーション
+ros2 launch airtable_bringup manual.launch.py plant:=real      # 実機（Piで hardware.launch.py）
 ```
+
+`launch/include/` は入口から読み込む部品で、直接は起動しません。
+旧launchとの対応:
+
+| 旧 | 新 |
+|---|---|
+| `simulation_control` / `manual_control` | `manual`（`plant:=sim` / `plant:=real`） |
+| `sg90hv_attitude` | `manual plant:=real`（`hardware.rw: sg90hv`）＋ Pi で `hardware` |
+| `simulation_tracking` | `manual tracking:=true start_joy:=false` |
+| `simulation_trajectory` / `simulation_robots` | `trajectory`（`plant:=sim`） |
+| `robots_trajectory_control` / `trajectory_control` | `trajectory plant:=real`（`trajectory_control` は `include/` へ） |
+| `robot_hardware` / `robot_tracking` | `hardware` / `tracking` |
+| `rviz` / `robots_rviz` | `rviz`（固定レイアウトは `rviz_config:=tracking`） |
+| `sg90_debug` | 廃止（SG90-HVへ置き換え） |
 
 ### スラスタモデルと操作方向
 
@@ -266,10 +297,10 @@ source /opt/ros/jazzy/setup.bash
 source install/setup.bash
 
 # 機体のyawを0 radに保ち、テーブルX方向に振幅0.10 m・周期20秒の単振動
-ros2 launch airtable_bringup simulation_trajectory.launch.py trajectory:=line rviz:=true
+ros2 launch airtable_bringup trajectory.launch.py trajectory:=line rviz:=true
 
 # 上のlaunchを終了してから、中心(0.5, 1.0)、半径0.20 m・周期20秒の円軌道
-ros2 launch airtable_bringup simulation_trajectory.launch.py trajectory:=circle radius:=0.20 rviz:=true
+ros2 launch airtable_bringup trajectory.launch.py trajectory:=circle radius:=0.20 rviz:=true
 ```
 
 直線の中心は開始位置です。円の中心は既定でテーブル中央(0.5, 1.0)に固定し、
@@ -281,7 +312,7 @@ simの初期位置を円周の右端へ自動配置します。半径0.20 mな�
 省略した軌道引数は `trajectory.yaml` の値を使用します。
 `viewer:=false` でMuJoCoウィンドウを省略できます。
 RVizでは目標軌道・目標姿勢が緑、実際の軌跡・姿勢が青です。
-手動操縦用やカメラ用のsim launchとは同時に起動しないでください。
+`manual.launch.py`（`plant:=sim`）とは同時に起動しないでください（simが二重になります）。
 
 **既定の制御入力はMuJoCoの真値** `/robot_1/sim/ground_truth` です。
 このlaunchでは既定で仮想カメラとArUco検出器を起動しません。
@@ -294,7 +325,7 @@ RW表示siteは非表示のgroup 3へ分離しました。ViewerでSite 3を有�
 初期位置・円の中心は以下で指定できます。
 
 ```bash
-ros2 launch airtable_bringup simulation_trajectory.launch.py \
+ros2 launch airtable_bringup trajectory.launch.py \
   trajectory:=circle radius:=0.20 circle_center_x:=0.5 circle_center_y:=1.0 \
   initial_x:=0.7 initial_y:=1.0 initial_yaw:=0.0 rviz:=true
 # カメラ画像とマーカー観測も並行して取得する場合は tracking:=true を追加
@@ -333,14 +364,15 @@ ros2 service call /robot_1/trajectory/enable std_srvs/srv/SetBool '{data: true}'
 明示的な再開を要求します。既定の状態タイムアウトは0.25秒、パルス幅は10 msです。
 これは公称値で、実機の最小噴射時間・弁応答に合わせた調整が必要です。
 
-実機や外部推定器へ接続する場合は、共通制御launchを使用します。既定では出力無効です。
+実機や外部推定器へ接続する場合は `plant:=real` を指定します。既定では出力無効です。
 
 ```bash
-ros2 launch airtable_bringup trajectory_control.launch.py \
-  state_topic:=/robot_1/state/odometry trajectory:=line
+ros2 launch airtable_bringup trajectory.launch.py plant:=real trajectory:=line
 ```
 
-このlaunchはhardware・カメラ・推定器を起動しません。入力は新鮮な `nav_msgs/Odometry` とし、
+状態入力は構成ファイルの `state_topic`（既定 `/robot_1/state/odometry`）で、
+`state_topic:=` で上書きできます。
+hardware・推定器は起動しません（カメラは `tracking:=true` のときだけ）。入力は新鮮な `nav_msgs/Odometry` とし、
 poseのframeは `table_1`、twistのframeは `robot_1/base_link` が既定です。
 実機の状態推定とスラスタI/Oは別途必要で、実機追従は未検証です。
 
@@ -373,22 +405,22 @@ ROSパラメータファイルとは別物で、`src/airtable_bringup/config/rob
 ```bash
 CFG=$(ros2 pkg prefix airtable_bringup)/share/airtable_bringup/config/robots
 
-# 1基（既定は single_robot.yaml）。従来の simulation_trajectory.launch.py もそのまま使える
-ros2 launch airtable_bringup simulation_robots.launch.py trajectory:=circle
+# 1基（既定は single_robot.yaml）
+ros2 launch airtable_bringup trajectory.launch.py trajectory:=circle
 
 # robot_2だけ（robot_1/table_1を含まないモデル）
-ros2 launch airtable_bringup simulation_robots.launch.py robot_config:=$CFG/robot_2_only.yaml
+ros2 launch airtable_bringup trajectory.launch.py robot_config:=$CFG/robot_2_only.yaml
 
 # 2基を1つのMuJoCoで同時に追従。RVizはworld基準で両機を色分け表示
-ros2 launch airtable_bringup simulation_robots.launch.py robot_config:=$CFG/dual_robot.yaml rviz:=true
+ros2 launch airtable_bringup trajectory.launch.py robot_config:=$CFG/dual_robot.yaml rviz:=true
 
 # 2基同時にテーブルごとのカメラで画像観測（比較用。制御入力は真値のまま）
-ros2 launch airtable_bringup simulation_robots.launch.py robot_config:=$CFG/dual_robot.yaml \
+ros2 launch airtable_bringup trajectory.launch.py robot_config:=$CFG/dual_robot.yaml \
   tracking:=true viewer:=false rviz:=true
 
 # 2基構成から1基だけ選ぶ／外乱をrobot_2だけに加える
-ros2 launch airtable_bringup simulation_robots.launch.py robot_config:=$CFG/dual_robot.yaml robots:=robot_2
-ros2 launch airtable_bringup simulation_robots.launch.py robot_config:=$CFG/dual_robot.yaml \
+ros2 launch airtable_bringup trajectory.launch.py robot_config:=$CFG/dual_robot.yaml robots:=robot_2
+ros2 launch airtable_bringup trajectory.launch.py robot_config:=$CFG/dual_robot.yaml \
   disturbance:=true disturbance_robot:=robot_2
 ```
 
@@ -396,12 +428,12 @@ ros2 launch airtable_bringup simulation_robots.launch.py robot_config:=$CFG/dual
 
 ```bash
 # PC: 両機の追従制御（既定で出力無効、入力は /robot_N/state/odometry、wall time）
-ros2 launch airtable_bringup robots_trajectory_control.launch.py robot_config:=$CFG/dual_robot.yaml
+ros2 launch airtable_bringup trajectory.launch.py plant:=real robot_config:=$CFG/dual_robot.yaml
 # 各Pi: 自機のhardwareだけ（teleop・手動controllerは起動しない）
-ros2 launch airtable_bringup robot_hardware.launch.py robot_config:=$CFG/dual_robot.yaml robot:=robot_1
-ros2 launch airtable_bringup robot_hardware.launch.py robot_config:=$CFG/dual_robot.yaml robot:=robot_2
+ros2 launch airtable_bringup hardware.launch.py robot_config:=$CFG/dual_robot.yaml robot:=robot_1
+ros2 launch airtable_bringup hardware.launch.py robot_config:=$CFG/dual_robot.yaml robot:=robot_2
 # 観測（カメラ・ArUco → /robot_N/measurements/external_pose）。未設定の機体は拒否される
-ros2 launch airtable_bringup robot_tracking.launch.py robot_config:=$CFG/dual_robot.yaml robot:=robot_1
+ros2 launch airtable_bringup tracking.launch.py robot_config:=$CFG/dual_robot.yaml robot:=robot_1
 # 推定器が /robot_N/state/odometry を出してから機体ごとに有効化
 ros2 service call /robot_2/trajectory/enable std_srvs/srv/SetBool "{data: true}"
 ```
@@ -420,7 +452,7 @@ ros2 service call /robot_2/trajectory/enable std_srvs/srv/SetBool "{data: true}"
   2カメラ同時だとsimの描画レートは各約13 Hz（1カメラ時の約半分、sim側の制約）です。
   詳細は[0015](docs/adr/0015-per-table-camera-tracking.md)。
 - 実機の world 配置・カメラserial・マーカー・IMU取り付け・物性値は未測定のため設定していません。
-  robot_2の実カメラ観測設定も未作成で、`robot_tracking.launch.py robot:=robot_2` は拒否されます。
+  robot_2の実カメラ観測設定も未作成で、`tracking.launch.py robot:=robot_2` は拒否されます。
 - 実機閉ループ追従には速度推定／EKFと実スラスタI/Oが別途必要です（未検証）。
 
 検証は `scripts/check_sim_multi_robot.py`（robot_2単独・2基同時・故障／指令／外乱の分離・
@@ -434,7 +466,7 @@ MuJoCoの機体重心へ、スラスタとは独立に平面外乱 `Fx / Fy / Mz
 
 ```bash
 source install/setup.bash
-ros2 launch airtable_bringup simulation_trajectory.launch.py \
+ros2 launch airtable_bringup trajectory.launch.py \
   trajectory:=circle radius:=0.20 disturbance:=true rviz:=true
 # 直線単振動は trajectory:=line
 ```
@@ -512,7 +544,7 @@ MCAP録画の`sim`プロファイルにも入力と適用値を追加してい�
 記録用の要求値・実適用値は従来の外乱トピックへ出します。
 
 ```bash
-ros2 launch airtable_bringup simulation_trajectory.launch.py \
+ros2 launch airtable_bringup trajectory.launch.py \
   trajectory:=circle radius:=0.20 disturbance:=true rviz:=true \
   disturbance_params_file:="$(ros2 pkg prefix --share airtable_bringup)/config/stochastic_disturbance.yaml"
 ```
@@ -574,19 +606,15 @@ ros2 run airtable_bringup experiment_bag convert /path/to/existing_bag
 ビルド、YAMLの拡張、条件・設定の保存、画像付き録画、Foxgloveでの再生は
 [実験ログの手順](src/airtable_bringup/README.md)を参照してください。
 
-### SG90によるRW接続デバッグ
-
-SG90をRWのダミーとして接続する場合は、
-[SG90デバッグ手順](docs/sg90-debug.md) を参照してください。
-device部はRustで実装し、GPIOなしの確認とPC / Raspberry Pi 5の分割起動に対応しています。
-SG90は指令トルクを角度で表示し、RW状態は仮想モデルの計算値です。
-設計判断は [0008. SG90をデバッグ用RWとして接続する](docs/adr/0008-sg90-debug-reaction-wheel.md)。
-
 ### SG90-HV（無限回転）によるARW-3mの代用RW
 
 ARW-3mが動くまで、無限回転のSG90-HVを機体に載せてRWだけでyawを保持できます。
 手動では数段階のホイール速度を切り替え、自動ではArUcoのyawを使ったPIDで姿勢を保持します。
 指令は正規化速度（`ReactionWheelSpeedCommand`）で、トルクのフィードバックはありません。
+構成ファイルの `hardware.rw: sg90hv` で選び、PCは `manual.launch.py plant:=real tracking:=true`、
+Piは `hardware.launch.py` で起動します。
+位置サーボSG90でトルクを表示する旧デバッグ構成（[0008](docs/adr/0008-sg90-debug-reaction-wheel.md)）は
+launchを廃止しました（Rustの `rw.backend: dummy / sysfs` は残っています）。
 Piの準備・校正・起動・ゲイン調整は [SG90-HV手順](docs/sg90hv-rw.md)、設計判断は
 [0018. 無限回転SG90-HVをARW-3mの代用RWとし、速度指令で姿勢PIDを行う](docs/adr/0018-sg90hv-speed-rw-attitude.md)。
 
@@ -622,7 +650,7 @@ ros2 launch airtable_tracking tracking.launch.py start_camera:=true
   RealSenseの規約では `camera_link` は+xがレンズ方向で、光学座標系は+zがレンズ方向です。
 - `table_size`: テーブル範囲 [x, y] [m]（既定1 × 2 m）。`marker_size` とともにRViz表示に使います。
 
-実機の表示は `robot_tracking.launch.py start_camera:=true rviz:=true` で起動します
+実機の表示は `tracking.launch.py start_camera:=true rviz:=true` で起動します
 （`rviz/tracking_real.rviz`、実時間）。`/robot_1/tracking/layout`（MarkerArray、
 Transient Local）が設定どおりのテーブル枠（青）と固定マーカーの既知位置・ID（黄）を出し、
 aruco_rosの検出TF `robot_1/aruco_marker_<ID>` の軸と重ねて校正のずれを確認できます。
@@ -691,20 +719,15 @@ source install/setup.bash
 操縦系と一緒に起動:
 
 ```bash
-ros2 launch airtable_bringup simulation_control.launch.py tracking:=true
-```
-
-カメラ・トラッキングのみを起動する場合:
-
-```bash
-ros2 launch airtable_bringup simulation_tracking.launch.py
+ros2 launch airtable_bringup manual.launch.py tracking:=true
+# ゲームパッドなし（カメラ・トラッキングの確認だけ）
+ros2 launch airtable_bringup manual.launch.py tracking:=true start_joy:=false
 # ウィンドウなし。画像描画にはEGL / OpenGLが必要です。
-ros2 launch airtable_bringup simulation_tracking.launch.py viewer:=false
+ros2 launch airtable_bringup manual.launch.py tracking:=true viewer:=false
 ```
 
-上記のlaunchはどれか1つを起動してください。操縦launchの `tracking:=true` は、
-通常のsimノードを置き換えてカメラ付きsimノードを1つだけ起動します。
-従来どおり `tracking:=false`（既定値）なら画像配信を無効にして起動します。
+`tracking:=true` はカメラ付きのsimノードを1つだけ起動します。
+`tracking:=false`（既定値）なら画像配信を無効にして起動します。
 
 | トピック | 内容 |
 |---|---|
@@ -753,17 +776,16 @@ yaw RMSE 0.24度、最大0.48度でした。これは現在の理想画像・配
 
 ```bash
 source install/setup.bash
-ros2 launch airtable_bringup rviz.launch.py
+ros2 launch airtable_bringup rviz.launch.py rviz_config:=tracking
 ```
 
 操縦系・シミュレータ・RVizをまとめて起動する場合は以下です。
 
 ```bash
-ros2 launch airtable_bringup simulation_control.launch.py tracking:=true rviz:=true
+ros2 launch airtable_bringup manual.launch.py tracking:=true rviz:=true
 # MuJoCoのウィンドウを省略し、RVizを表示する場合は viewer:=false を追加
 ```
 
-操縦系が不要なら `simulation_tracking.launch.py rviz:=true` でも起動できます。
 既に起動中のsimへ接続する場合は `rviz.launch.py` を使い、simを二重起動しないでください。
 設定ファイルは `src/airtable_bringup/rviz/tracking.rviz` です。
 Fixed Frameは `table_1`、RVizの `use_sim_time` はtrueに設定しています。
@@ -781,11 +803,10 @@ Fixed Frameは `table_1`、RVizの `use_sim_time` はtrueに設定していま�
 現在の `robot_1/base_link` のTFはシミュレータの真値です。
 緑のPoseはArUco単独の観測結果で、IMUとのEKF融合はまだ行っていません。
 Poseの共分散は未使用軸に大きな分散を設定しているため、RViz設定では共分散描画を無効にしています。
-画像とカメラTFは `tracking:=true` または `simulation_tracking.launch.py` の起動時に配信されます。
+画像とカメラTFは `tracking:=true` の起動時に配信されます。
 
 手動設定の場合もFixed Frameを `table_1` にして、上表のDisplayと配信元を選択してください。
-実機用にこのRViz起動を使う場合は `use_sim_time:=false` を指定し、トピックとフレームを
-実機の構成に合わせて変更してください。
+実機は `rviz.launch.py plant:=real rviz_config:=tracking_real`（`rviz/tracking_real.rviz`）を使います。
 
 ## 設計判断の記録
 

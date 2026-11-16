@@ -1,4 +1,4 @@
-"""Start the shared fixed-yaw trajectory, allocation and pulse control chain."""
+"""Component: fixed-yaw trajectory, allocation and pulse chain of one robot (included)."""
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction

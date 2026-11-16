@@ -1,6 +1,6 @@
 # airtable_hardware: SG90-HV continuous-rotation servo standing in for the ARW-3m
-# (docs/adr/0018, docs/sg90hv-rw.md). Used by sg90hv_attitude.launch.py.
-# The wheel takes ReactionWheelSpeedCommand (normalized [-1, 1]) on
+# (docs/adr/0018, docs/sg90hv-rw.md). Selected by hardware.rw: sg90hv of the robot
+# configuration. The wheel takes ReactionWheelSpeedCommand (normalized [-1, 1]) on
 # actuators/reaction_wheels/speed_command and publishes no RW state (no feedback).
 /**:
   ros__parameters:
@@ -8,16 +8,16 @@
       enabled: true
       backend: continuous_servo
       name: rw_1
-      # Set by the launch argument pwm_path; empty runs a dummy PWM that only logs.
-      # Pi 5 wiring: GPIO18 (header pin 12) = RP1 PWM0 channel 2 = pwmchip0/pwm2.
-      pwm_path: ""
-      # Calibrate with ~/test/sg90_rust on the actual servo before use:
+      # Pi 5 wiring: GPIO18 (header pin 12) = RP1 PWM0 channel 2, prepared at boot by
+      # scripts/pi/airtable-pwm-setup.sh. Empty runs a dummy PWM that only logs.
+      pwm_path: /sys/class/pwm/pwmchip0/pwm2
+      # Calibrated on the Pi with ~/test/sg90_rust (2026-11-17):
       # neutral = stop pulse, deadband = half-width of the band that still stops,
       # min/max = pulses used for full CW/CCW speed (keep them within the servo's range).
       min_pulse_us: 1000
-      neutral_pulse_us: 1500
+      neutral_pulse_us: 1530
       max_pulse_us: 2000
-      deadband_us: 0
+      deadband_us: 50
       # true if +speed turns the wheel CW (seen from above) as mounted.
       reversed: false
       # No valid command for this long stops the servo.

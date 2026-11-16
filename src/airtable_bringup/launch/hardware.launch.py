@@ -1,27 +1,28 @@
 """
-Raspberry Pi side: start only the selected robot's airtable_hardware node.
+Raspberry Pi side: start only the selected robot's airtable_hardware node. docs/adr/0019.
 
-- ros2 launch airtable_bringup robot_hardware.launch.py
-  robot_config:=<.../dual_robot.yaml> robot:=robot_2
+- ros2 launch airtable_bringup hardware.launch.py                 (single_robot.yaml)
+- ros2 launch airtable_bringup hardware.launch.py \
+    robot_config:=<.../dual_robot.yaml> robot:=robot_2
 
-No teleop, manual controller or trajectory controller is started here; the PC
-runs robots_trajectory_control.launch.py. The thruster/IMU I/O of
-airtable_hardware defaults to dummy backends; real I/O is enabled only by a parameter
-file: hardware.params of the robot configuration or hardware_params:=, e.g.
-package://airtable_bringup/config/hardware_pi.yaml (GPIO valves, optional ARW-3m).
+Parameters, lowest first: hardware.params of the robot configuration (or
+hardware_params:=; e.g. config/hardware_pi.yaml for the GPIO valves), then the wheel
+file of hardware.rw (config/arw3m.yaml, config/sg90hv.yaml; hardware.rw_params to use
+another file), then the IMU frame. Without them every backend is dummy.
+The PC runs manual.launch.py or trajectory.launch.py with plant:=real.
 """
 
 from pathlib import Path
 
-from airtable_bringup.robot_config import (
-    ConfigError, load_robot_config, resolve_path, select_robots)
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
+from airtable_bringup.launch_helpers import (
+    CONFIG_ARGUMENT, default_robot_config, entry_description, launch_arguments, select_one)
+from airtable_bringup.robot_config import load_robot_config, resolve_path
+from launch.actions import LogInfo
 from launch_ros.actions import Node
 
 
 ARGUMENTS = [
-    ('robot_config', '', 'Robot configuration YAML; empty: config/robots/single_robot.yaml'),
+    CONFIG_ARGUMENT,
     ('robot', '', 'Namespace of the robot this Pi drives; required with several robots'),
     ('hardware_params', '', 'ROS parameter file replacing hardware.params of the configuration '
                             '(path or package://...); empty: use the configuration'),
@@ -30,28 +31,20 @@ ARGUMENTS = [
 
 def setup(context):
     """Select exactly one robot and start its hardware node with per-robot frames."""
-    from ament_index_python.packages import get_package_share_directory
-
-    args = {name: context.launch_configurations.get(name, '') for name, _, _ in ARGUMENTS}
-    config_path = args['robot_config'] or str(Path(
-        get_package_share_directory('airtable_bringup'), 'config', 'robots',
-        'single_robot.yaml'))
+    args = launch_arguments(context, ARGUMENTS)
     # The Pi has no sim/controller/tracking packages; resolve only the hardware section.
-    config = load_robot_config(config_path, hardware_only=True)
-    names = [robot['namespace'] for robot in config['robots']]
-    if not args['robot'] and len(names) != 1:
-        raise ConfigError(f'robot:= is required; {config_path} defines {names}')
-    robots = select_robots(config, args['robot'] or names[0])
-    if len(robots) != 1:
-        raise ConfigError('robot:= must name exactly one robot')
-    robot = robots[0]
+    config = load_robot_config(args['robot_config'] or default_robot_config(),
+                               hardware_only=True)
+    robot = select_one(config, args['robot'])
     hardware = robot['hardware']
     if args['hardware_params']:
         hardware['params'] = resolve_path(args['hardware_params'], Path.cwd(), 'hardware_params')
-    parameters = [] if hardware['params'] is None else [str(hardware['params'])]
+    parameters = [str(path) for path in (hardware['params'], hardware['rw_params'])
+                  if path is not None]
     parameters.append({'use_sim_time': False, 'imu_frame_id': hardware['imu_frame']})
     actions = [
         LogInfo(msg=f'{robot["namespace"]}: hardware params={hardware["params"]}, '
+                    f'rw={hardware["rw"]} ({hardware["rw_params"]}), '
                     f'imu_frame={hardware["imu_frame"]}, imu_mount={hardware["imu_mount"]}'),
         Node(package='airtable_hardware', executable='airtable_hardware',
              name='airtable_hardware', namespace=robot['namespace'], output='screen',
@@ -73,8 +66,4 @@ def setup(context):
 
 def generate_launch_description():
     """Declare arguments; the selected robot's values come from the configuration."""
-    return LaunchDescription([
-        *(DeclareLaunchArgument(name, default_value=default, description=description)
-          for name, default, description in ARGUMENTS),
-        OpaqueFunction(function=setup),
-    ])
+    return entry_description(ARGUMENTS, setup)

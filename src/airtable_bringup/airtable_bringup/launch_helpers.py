@@ -1,11 +1,190 @@
-"""Launch building blocks shared by the robot-configuration launch files."""
+"""
+Launch building blocks shared by the entry launch files (docs/adr/0019).
+
+Entry points: manual / trajectory (PC, plant:=sim|real), hardware (Pi), tracking (real
+camera only) and rviz. They all read a robot configuration (config/robots/*.yaml).
+"""
 
 from pathlib import Path
 import tempfile
 import xml.etree.ElementTree as ET
 
-from airtable_bringup.robot_config import merge, yaml_argument
+from airtable_bringup.robot_config import (
+    check_simulation_cameras, check_simulation_model, ConfigError, merge, select_robots,
+    yaml_argument)
 import yaml
+
+PLANTS = ('sim', 'real')
+PLANT_ARGUMENT = ('plant', 'sim', "sim: run MuJoCo on this PC; real: the robot's Raspberry Pi "
+                  'runs hardware.launch.py')
+CONFIG_ARGUMENT = ('robot_config', '',
+                   'Robot configuration YAML; empty: config/robots/single_robot.yaml')
+
+
+def bringup_share(*parts):
+    """Return a path inside this package's share directory."""
+    from ament_index_python.packages import get_package_share_directory
+    return str(Path(get_package_share_directory('airtable_bringup'), *parts))
+
+
+def default_robot_config():
+    """Return the robot configuration used when robot_config:= is empty."""
+    return bringup_share('config', 'robots', 'single_robot.yaml')
+
+
+def launch_arguments(context, arguments):
+    """Return (name, default, description) launch argument values as strings."""
+    return {name: context.launch_configurations.get(name, '') for name, _, _ in arguments}
+
+
+def entry_description(arguments, setup):
+    """Declare the arguments and resolve everything else in an OpaqueFunction."""
+    from launch import LaunchDescription
+    from launch.actions import DeclareLaunchArgument, OpaqueFunction
+
+    return LaunchDescription([
+        *(DeclareLaunchArgument(name, default_value=default, description=description)
+          for name, default, description in arguments),
+        OpaqueFunction(function=setup),
+    ])
+
+
+def is_true(value):
+    """Convert a launch argument string to bool."""
+    return str(value).lower() == 'true'
+
+
+def plant_of(args):
+    """Return the validated plant:= value."""
+    plant = args['plant'].lower()
+    if plant not in PLANTS:
+        raise ConfigError(f'plant must be one of {list(PLANTS)}, got {args["plant"]!r}')
+    return plant
+
+
+def reject_for_real(args, defaults):
+    """Refuse simulator-only arguments given with plant:=real instead of ignoring them."""
+    given = [name for name, default in defaults.items() if args.get(name, default) != default]
+    if given:
+        raise ConfigError(f'{given} only apply to plant:=sim')
+
+
+def select_one(config, name):
+    """Return the robot named by robot:=, which may be omitted for one-robot files."""
+    names = [robot['namespace'] for robot in config['robots']]
+    if not name and len(names) != 1:
+        raise ConfigError(f'robot:= is required; {config["path"]} defines {names}')
+    robots = select_robots(config, name or names[0])
+    if len(robots) != 1:
+        raise ConfigError('robot:= must name exactly one robot')
+    return robots[0]
+
+
+def simulation_actions(robots, *, model, viewer, camera_fps, tracking, poses):
+    """Start one MuJoCo simulator for the robots, plus per-table camera observation."""
+    from launch_ros.actions import Node
+
+    check_simulation_model(model, robots)
+    if tracking:
+        missing = [robot['namespace'] for robot in robots
+                   if robot['tracking'].get('simulation') is None]
+        if missing:
+            raise ConfigError(f'tracking:=true: {missing} have no tracking.simulation_params; '
+                              'select robots:= with simulation tracking or add it')
+        check_simulation_cameras(model, robots)
+    sim_params = {
+        # The simulator's wall timers produce /clock; they must not wait on that clock.
+        'use_sim_time': False,
+        'model_path': model,
+        'viewer': viewer,
+        'enable_camera': tracking,
+        'camera_fps': float(camera_fps),
+        'vehicles': [robot['namespace'] for robot in robots],
+        'vehicle_element_prefixes': [robot['simulation']['element_prefix'] for robot in robots],
+    }
+    if tracking:
+        cameras = [robot['tracking']['simulation'] for robot in robots]
+        sim_params['camera_names'] = [camera['camera'] for camera in cameras]
+        sim_params['camera_namespaces'] = [camera['namespace'] for camera in cameras]
+        sim_params['camera_frames'] = [camera['camera_frame'] for camera in cameras]
+    if poses:
+        sim_params['initial_pose_vehicles'] = [name for name, _ in poses]
+        sim_params['initial_poses'] = [value for _, pose in poses for value in pose]
+    actions = [Node(package='airtable_sim', executable='airtable_sim', name='airtable_sim',
+                    output='screen', parameters=[sim_params])]
+    for robot in robots if tracking else []:
+        camera = robot['tracking']['simulation']
+        actions.append(_tracking_include({
+            'namespace': robot['namespace'], 'use_sim_time': 'true',
+            'params_file': str(robot['tracking']['simulation_params']),
+            'start_camera': 'false', 'start_detectors': 'true',
+            'camera_frame': camera['camera_frame'],
+            'image_topic': camera['image_topic'],
+            'camera_info_topic': camera['camera_info_topic'],
+            'marker_size': str(camera['marker_size']),
+        }))
+    return actions
+
+
+REAL_TRACKING_REQUIRED = ('params', 'camera_frame', 'image_topic', 'camera_info_topic',
+                          'marker_size')
+
+
+def real_tracking_include(config, robot, *, start_camera, start_detectors=True):
+    """Observe one robot with its RealSense and ArUco; refuse unmeasured settings."""
+    tracking = robot['tracking']
+    missing = [key for key in REAL_TRACKING_REQUIRED if tracking.get(key) in (None, '')]
+    if missing:
+        raise ConfigError(f'{robot["namespace"]}: tracking {missing} not configured in '
+                          f'{config["path"]}; measure and set them before starting observation')
+    serial = tracking.get('camera_serial_no')
+    others = [r for r in config['robots'] if r is not robot and r['tracking'].get('params')]
+    if start_camera and serial in (None, '') and others:
+        raise ConfigError(f'{robot["namespace"]}: tracking.camera_serial_no is required to '
+                          'start one of several cameras')
+    # Topics are /<camera_namespace>/<camera_name>/infra1/...; derive both from image_topic.
+    parts = tracking['image_topic'].strip('/').split('/')
+    camera_namespace, camera_name = (parts[0], parts[1]) if len(parts) >= 4 else (
+        'camera', 'camera')
+    return _tracking_include({
+        'namespace': robot['namespace'], 'use_sim_time': 'false',
+        'params_file': str(tracking['params']),
+        'camera_frame': tracking['camera_frame'],
+        'image_topic': tracking['image_topic'],
+        'camera_info_topic': tracking['camera_info_topic'],
+        'marker_size': str(float(tracking['marker_size'])),
+        'start_camera': 'true' if start_camera else 'false',
+        'start_detectors': 'true' if start_detectors else 'false',
+        # rs_launch.py keeps the serial a string only when it is quoted.
+        'camera_serial_no': "''" if serial in (None, '') else f"'{serial}'",
+        'camera_name': camera_name, 'camera_namespace': camera_namespace,
+    })
+
+
+def _tracking_include(arguments):
+    from launch.actions import IncludeLaunchDescription
+    from launch.launch_description_sources import PythonLaunchDescriptionSource
+    from launch.substitutions import PathJoinSubstitution
+    from launch_ros.substitutions import FindPackageShare
+
+    return IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(PathJoinSubstitution([
+            FindPackageShare('airtable_tracking'), 'launch', 'tracking.launch.py'])),
+        launch_arguments=arguments.items())
+
+
+# Fixed RViz layouts in rviz/ (robot_1, single camera); generated otherwise.
+STATIC_RVIZ = {'tracking': 'tracking.rviz', 'tracking_real': 'tracking_real.rviz'}
+
+
+def static_rviz_node(name, *, use_sim_time):
+    """Start RViz with rviz/<STATIC_RVIZ[name]> or an explicit .rviz path."""
+    from launch_ros.actions import Node
+
+    path = bringup_share('rviz', STATIC_RVIZ[name]) if name in STATIC_RVIZ else name
+    return Node(package='rviz2', executable='rviz2', name='airtable_rviz', output='screen',
+                arguments=['-d', path], parameters=[{'use_sim_time': use_sim_time}])
+
 
 # Distinct colours per robot slot: (reference, actual, ArUco measurement).
 PALETTE = [
@@ -38,7 +217,8 @@ def control_include(robot, *, use_sim_time, enabled, state_topic, launch_overrid
     }
     return IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([
-            FindPackageShare('airtable_bringup'), 'launch', 'trajectory_control.launch.py'])),
+            FindPackageShare('airtable_bringup'), 'launch', 'include',
+            'trajectory_control.launch.py'])),
         launch_arguments=arguments.items())
 
 

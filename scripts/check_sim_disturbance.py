@@ -217,7 +217,7 @@ def run_trial(args, logs, kind, load, config, duration):
         node.create_subscription(Bool, '/robot_1/trajectory/active', active.append,
                                  QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)),
     ]
-    command = ['ros2', 'launch', 'airtable_bringup', 'simulation_trajectory.launch.py',
+    command = ['ros2', 'launch', 'airtable_bringup', 'trajectory.launch.py',
                f'trajectory:={kind}', 'viewer:=false', f'period:={args.period}',
                f'radius:={args.radius}', f'disturbance:={str(load).lower()}',
                f'disturbance_params_file:={args.disturbance_params}']

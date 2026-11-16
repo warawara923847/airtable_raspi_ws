@@ -141,7 +141,7 @@ def main():
         return runs[0], manifest, read_bag(runs[0] / 'bag')
 
     try:
-        command = ['ros2', 'launch', 'airtable_bringup', 'simulation_trajectory.launch.py',
+        command = ['ros2', 'launch', 'airtable_bringup', 'trajectory.launch.py',
                    'trajectory:=circle', 'radius:=0.20', 'viewer:=false', 'rviz:=false']
         with running(command, temporary / 'simulation.log') as simulation:
             spin_until(lambda: received['truth'] > 30 and received['clock'] > 30)
