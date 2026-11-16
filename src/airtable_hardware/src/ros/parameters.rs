@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use rclrs::{Node, ReadOnlyParameter};
 
 use crate::devices::arw3m_wheel::{Arw3mConfig, Arw3mWheel};
+use crate::devices::continuous_servo_wheel::{ContinuousServoConfig, ContinuousServoWheel};
 use crate::devices::reaction_wheel::{DebugReactionWheel, DebugWheelConfig};
 use crate::devices::thruster::Thruster;
 use crate::drivers::arw3m::DEFAULT_ADDRESS;
@@ -121,6 +122,8 @@ pub struct WheelParameters {
     min_us: ReadOnlyParameter<i64>,
     neutral_us: ReadOnlyParameter<i64>,
     max_us: ReadOnlyParameter<i64>,
+    deadband_us: ReadOnlyParameter<i64>,
+    reversed: ReadOnlyParameter<bool>,
     max_torque: ReadOnlyParameter<f64>,
     inertia: ReadOnlyParameter<f64>,
     max_speed: ReadOnlyParameter<f64>,
@@ -161,6 +164,16 @@ impl WheelParameters {
             max_us: node
                 .declare_parameter("rw.max_pulse_us")
                 .default(1700_i64)
+                .read_only()?,
+            // continuous_servo: half-width of the band around the stop pulse that the servo
+            // ignores, and flipping the pulse side to match the mounting.
+            deadband_us: node
+                .declare_parameter("rw.deadband_us")
+                .default(0_i64)
+                .read_only()?,
+            reversed: node
+                .declare_parameter("rw.reversed")
+                .default(false)
                 .read_only()?,
             max_torque: node
                 .declare_parameter("rw.max_torque_nm")
@@ -220,6 +233,35 @@ impl WheelParameters {
                 Arw3mWheel::new(config, Box::new(bus)).map_err(std::io::Error::other)?,
             )));
         }
+        let calibration = ServoCalibration {
+            min_us: u16::try_from(self.min_us.get())?,
+            neutral_us: u16::try_from(self.neutral_us.get())?,
+            max_us: u16::try_from(self.max_us.get())?,
+            deadband_us: u16::try_from(self.deadband_us.get())?,
+        };
+        calibration.validate().map_err(std::io::Error::other)?;
+        let backend = self.backend.get();
+        let path = self.pwm_path.get();
+        // Validate the device configuration before taking over the PWM channel.
+        if backend.as_ref() == "continuous_servo" {
+            let config = ContinuousServoConfig {
+                name: self.name.get().to_string(),
+                reversed: self.reversed.get(),
+                command_timeout: Duration::from_millis(timeout),
+            };
+            config.validate().map_err(std::io::Error::other)?;
+            let pwm = if path.is_empty() {
+                eprintln!("[hardware] rw.pwm_path is empty: continuous servo uses dummy PWM");
+                ServoPwm::dummy()
+            } else {
+                ServoPwm::linux(path.as_ref(), calibration.neutral_us)
+                    .map_err(std::io::Error::other)?
+            };
+            let driver = ServoDriver::new(pwm, calibration).map_err(std::io::Error::other)?;
+            return Ok(Some(ReactionWheel::ContinuousServo(
+                ContinuousServoWheel::new(config, driver).map_err(std::io::Error::other)?,
+            )));
+        }
         let config = DebugWheelConfig {
             name: self.name.get().to_string(),
             max_torque_nm: self.max_torque.get(),
@@ -228,16 +270,9 @@ impl WheelParameters {
             command_timeout: Duration::from_millis(timeout),
         };
         config.validate().map_err(std::io::Error::other)?;
-        let calibration = ServoCalibration {
-            min_us: u16::try_from(self.min_us.get())?,
-            neutral_us: u16::try_from(self.neutral_us.get())?,
-            max_us: u16::try_from(self.max_us.get())?,
-        };
-        calibration.validate().map_err(std::io::Error::other)?;
-        let pwm = match self.backend.get().as_ref() {
+        let pwm = match backend.as_ref() {
             "dummy" => ServoPwm::dummy(),
             "sysfs" => {
-                let path = self.pwm_path.get();
                 if path.is_empty() {
                     return Err(
                         "rw.pwm_path is required for sysfs (exported PWM channel directory)".into(),
@@ -247,9 +282,10 @@ impl WheelParameters {
                     .map_err(std::io::Error::other)?
             }
             backend => {
-                return Err(
-                    format!("unknown rw.backend: {backend}; use dummy, sysfs or arw3m").into(),
-                );
+                return Err(format!(
+                    "unknown rw.backend: {backend}; use dummy, sysfs, continuous_servo or arw3m"
+                )
+                .into());
             }
         };
         let driver = ServoDriver::new(pwm, calibration).map_err(std::io::Error::other)?;

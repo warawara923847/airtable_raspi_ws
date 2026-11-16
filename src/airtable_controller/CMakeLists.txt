@@ -48,6 +48,12 @@ target_link_libraries(airtable_trajectory_controller_node Eigen3::Eigen)
 ament_target_dependencies(airtable_trajectory_controller_node
     rclcpp geometry_msgs nav_msgs std_msgs std_srvs)
 
+add_executable(airtable_rw_attitude_node
+    src/rw_attitude_node.cpp src/rw_attitude_controller.cpp)
+target_include_directories(airtable_rw_attitude_node PRIVATE include)
+ament_target_dependencies(airtable_rw_attitude_node
+    rclcpp geometry_msgs airtable_interfaces)
+
 add_executable(airtable_pulse_modulator_node src/pulse_modulator_node.cpp)
 target_include_directories(airtable_pulse_modulator_node PRIVATE include)
 ament_target_dependencies(airtable_pulse_modulator_node rclcpp airtable_interfaces)
@@ -57,6 +63,7 @@ install(
         airtable_controller_node
         airtable_trajectory_controller_node
         airtable_pulse_modulator_node
+        airtable_rw_attitude_node
     DESTINATION 
         lib/${PROJECT_NAME}
 )
@@ -73,6 +80,8 @@ if(BUILD_TESTING)
     src/control_allocator.cpp src/planar_trajectory.cpp)
   target_include_directories(test_trajectory_control PRIVATE include)
   target_link_libraries(test_trajectory_control Eigen3::Eigen)
+  ament_add_gtest(test_rw_attitude test/test_rw_attitude.cpp src/rw_attitude_controller.cpp)
+  target_include_directories(test_rw_attitude PRIVATE include)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files

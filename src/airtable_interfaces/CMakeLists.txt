@@ -20,6 +20,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
     "msg/ThrusterPulseCommand.msg"
     "msg/ReactionWheelCommand.msg"
     "msg/ReactionWheelState.msg"
+    "msg/ReactionWheelSpeedCommand.msg"
     DEPENDENCIES
       builtin_interfaces
 )

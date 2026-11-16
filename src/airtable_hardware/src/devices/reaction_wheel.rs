@@ -150,6 +150,7 @@ mod tests {
                     min_us: 1300,
                     neutral_us: 1500,
                     max_us: 1700,
+                    deadband_us: 0,
                 },
             )
             .unwrap(),

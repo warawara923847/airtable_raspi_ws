@@ -9,3 +9,6 @@ airtable_teleop:
 
     button_rotate_ccw: 9
     button_rotate_cw: 10
+
+    # Yaw-hold PID on/off for the SG90-HV stand-in RW (airtable_rw_attitude_node).
+    button_rw_attitude_toggle: 2

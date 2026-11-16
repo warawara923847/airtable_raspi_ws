@@ -35,15 +35,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rw_parameters = ros::parameters::WheelParameters::declare(&node)?;
     let reaction_wheel = rw_parameters.create_wheel()?;
     let rw_enabled = reaction_wheel.is_some();
+    let rw_speed_commanded = reaction_wheel
+        .as_ref()
+        .is_some_and(hardware::ReactionWheel::is_speed_commanded);
     let thruster_parameters = ros::parameters::ThrusterParameters::declare(&node)?;
     let thrusters = thruster_parameters.create_thrusters()?;
     let hardware = node.create_worker(HardwareState::new(thrusters, reaction_wheel));
 
-    let (_rw_subscription, _rw_timer) = if rw_enabled {
-        let subscription = hardware.create_subscription(
-            "actuators/reaction_wheels/command",
-            ros::subscribers::handle_reaction_wheel_command,
-        )?;
+    let (_rw_subscription, _rw_speed_subscription, _rw_timer) = if rw_enabled {
+        // A wheel takes either torque or speed commands; subscribe to that topic only.
+        let (subscription, speed_subscription) = if rw_speed_commanded {
+            let speed_subscription = hardware.create_subscription(
+                "actuators/reaction_wheels/speed_command",
+                ros::subscribers::handle_reaction_wheel_speed_command,
+            )?;
+            (None, Some(speed_subscription))
+        } else {
+            let subscription = hardware.create_subscription(
+                "actuators/reaction_wheels/command",
+                ros::subscribers::handle_reaction_wheel_command,
+            )?;
+            (Some(subscription), None)
+        };
         let publisher = node.create_publisher::<airtable_interfaces::msg::ReactionWheelState>(
             "actuators/reaction_wheels/state",
         )?;
@@ -64,9 +77,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Err(error) => eprintln!("[hardware] RW update failed: {error}"),
             },
         )?;
-        (Some(subscription), Some(timer))
+        (subscription, speed_subscription, Some(timer))
     } else {
-        (None, None)
+        (None, None, None)
     };
 
     let _thruster_pulse_subscription = hardware.create_subscription(

@@ -9,6 +9,8 @@ uint8 THRUSTER_ROTATE_CCW=5
 uint8 THRUSTER_ROTATE_CW=6
 uint8 RW_ROTATE_CCW=7
 uint8 RW_ROTATE_CW=8
+# Toggle yaw attitude hold by the reaction wheel (rw_attitude node).
+uint8 RW_ATTITUDE_TOGGLE=9
 
 builtin_interfaces/Time stamp
 uint8 command

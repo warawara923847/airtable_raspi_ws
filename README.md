@@ -582,6 +582,14 @@ device部はRustで実装し、GPIOなしの確認とPC / Raspberry Pi 5の分�
 SG90は指令トルクを角度で表示し、RW状態は仮想モデルの計算値です。
 設計判断は [0008. SG90をデバッグ用RWとして接続する](docs/adr/0008-sg90-debug-reaction-wheel.md)。
 
+### SG90-HV（無限回転）によるARW-3mの代用RW
+
+ARW-3mが動くまで、無限回転のSG90-HVを機体に載せてRWだけでyawを保持できます。
+手動では数段階のホイール速度を切り替え、自動ではArUcoのyawを使ったPIDで姿勢を保持します。
+指令は正規化速度（`ReactionWheelSpeedCommand`）で、トルクのフィードバックはありません。
+Piの準備・校正・起動・ゲイン調整は [SG90-HV手順](docs/sg90hv-rw.md)、設計判断は
+[0018. 無限回転SG90-HVをARW-3mの代用RWとし、速度指令で姿勢PIDを行う](docs/adr/0018-sg90hv-speed-rw-attitude.md)。
+
 ### マーカートラッキング
 
 `airtable_tracking` は旧 `airtable_ws` と同様に、外部固定カメラで固定マーカー4個と

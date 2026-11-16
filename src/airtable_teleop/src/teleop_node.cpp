@@ -42,6 +42,10 @@ public:
         button_rw_rotate_cw_ =
             this->declare_parameter<int>("button_rw_rotate_cw", 1); 
 
+        // Toggles yaw-hold PID in airtable_rw_attitude_node; -1 disables the button.
+        button_rw_attitude_toggle_ =
+            this->declare_parameter<int>("button_rw_attitude_toggle", 2);
+
         publisher_ =
             this->create_publisher<
                 airtable_interfaces::msg::ManualMotionCommand>(
@@ -109,6 +113,11 @@ private:
                 airtable_interfaces::msg::ManualMotionCommand::RW_ROTATE_CW);
         }
 
+        if (rising_edge(msg, button_rw_attitude_toggle_)) {
+            publish_command(
+                airtable_interfaces::msg::ManualMotionCommand::RW_ATTITUDE_TOGGLE);
+        }
+
         previous_buttons_ = msg->buttons;
     }
 
@@ -171,6 +180,7 @@ private:
     int button_thruster_rotate_cw_;
     int button_rw_rotate_ccw_;
     int button_rw_rotate_cw_;
+    int button_rw_attitude_toggle_;
 
     rclcpp::Publisher<
         airtable_interfaces::msg::ManualMotionCommand>::SharedPtr publisher_;
