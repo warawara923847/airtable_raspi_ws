@@ -38,9 +38,20 @@ impl ServoPwm {
             ));
         }
         let mut pwm = Self::Linux { path: path.clone() };
-        write_attribute(&path, "duty_cycle", 0)?;
+        // The kernel rejects every attribute write (EINVAL) unless 0 < period and
+        // duty_cycle <= period hold afterwards. A freshly exported Pi 4 (BCM2711) channel
+        // has period 0, so the period goes first there; otherwise the duty is cleared first
+        // so that an old duty longer than the new period cannot block the period write.
+        let period = fs::read_to_string(path.join("period"))
+            .map_err(|error| format!("{}/period: {error}", path.display()))?;
+        if period.trim() == "0" {
+            write_attribute(&path, "period", PERIOD_NS)?;
+            write_attribute(&path, "duty_cycle", 0)?;
+        } else {
+            write_attribute(&path, "duty_cycle", 0)?;
+            write_attribute(&path, "period", PERIOD_NS)?;
+        }
         write_attribute(&path, "polarity", "normal")?;
-        write_attribute(&path, "period", PERIOD_NS)?;
         pwm.set_pulse_width_us(neutral_us)?;
         write_attribute(&path, "enable", 1)?;
         Ok(pwm)
