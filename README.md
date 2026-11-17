@@ -119,7 +119,8 @@ ros2 topic pub --once /actuators/thrusters/pulse airtable_interfaces/msg/Thruste
 
 PC と Pi は同じリポジトリを使い、Pi では `airtable_interfaces` / `airtable_hardware` /
 `airtable_bringup` だけをビルドします（MuJoCo を含む `airtable_sim` や controller、
-tracking は PC 専用）。Pi 5・Ubuntu 24.04・`ros-jazzy-ros-base` で確認しています。
+tracking は PC 専用）。Pi 4・Ubuntu 24.04・`ros-jazzy-ros-base` で使っています（以前はPi 5。
+Pi 4への置き換えは [0021](docs/adr/0021-raspberry-pi-4-io.md)）。
 
 `ros-base` には `rclrs` が無条件にリンクするパッケージが含まれないため、追加で導入します。
 Rust ツールチェーン・`uv sync`・`rust_packages` インデックスの復元は上記 2〜4 と同じです。
@@ -169,11 +170,13 @@ ros2 launch airtable_bringup hardware.launch.py \
 
 - バルブは常閉として扱い、起動時・パルス終了時・ノード終了時に Low にします。
   パルス長は Pi 側で計時し、`thrusters.max_pulse_ms` を超える指令は短縮します。
-- GPIO は `gpio` グループ（Pi 5 の Ubuntu では `/dev/gpiochip4` が `dialout`）、
+- GPIO は `gpio` グループ（Pi 4 の Ubuntu では `/dev/gpiochip0`（ラベル `pinctrl-bcm2711`）が `dialout`）、
   I2C は `i2c` グループの権限で動きます。sudo は不要です。
 - Pi の実ピン（未配線）とユニットテストで検証済みで、バルブ・RW の実機は未接続です。
   ARW-3m の実装は C サンプルと送信バイト列が一致することまで確認しています。
 - 実ピンの確認: `cd src/airtable_hardware && AIRTABLE_TEST_GPIO_LINE=19 cargo test -- --ignored real_gpio`
+- バルブを繋いだ確認（配線・番号・向き・最短パルス）は [バルブ確認手順](docs/valve-check.md)。
+  `scripts/check_valves.py` が `pulse` を1本ずつ送ります。
 
 設計判断と検証値は
 [0016. Raspberry Pi 向けビルド分離と実I/O](docs/adr/0016-pi-build-and-real-io.md)。

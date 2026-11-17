@@ -8,9 +8,10 @@
       enabled: true
       backend: continuous_servo
       name: rw_1
-      # Pi 5 wiring: GPIO18 (header pin 12) = RP1 PWM0 channel 2, prepared at boot by
-      # scripts/pi/airtable-pwm-setup.sh. Empty runs a dummy PWM that only logs.
-      pwm_path: /sys/class/pwm/pwmchip0/pwm2
+      # Pi 4 wiring: GPIO18 (header pin 12) = BCM2711 PWM0 channel 0 (fe20c000.pwm),
+      # prepared at boot by scripts/pi/airtable-pwm-setup.sh. On the Pi 5 it was
+      # pwmchip0/pwm2 (RP1, docs/adr/0021). Empty runs a dummy PWM that only logs.
+      pwm_path: /sys/class/pwm/pwmchip0/pwm0
       # Calibrated on the Pi with ~/test/sg90_rust (2026-11-17):
       # neutral = stop pulse, deadband = half-width of the band that still stops,
       # min/max = pulses used for full CW/CCW speed (keep them within the servo's range).

@@ -11,13 +11,11 @@ use crate::drivers::arw3m::DEFAULT_ADDRESS;
 use crate::drivers::servo::{ServoCalibration, ServoDriver};
 use crate::drivers::valve::ValveDriver;
 use crate::hardware::ReactionWheel;
-use crate::io::gpio::{OutputLine, find_chip};
+use crate::io::gpio::{HEADER_CHIP_LABEL, OutputLine, find_chip};
 use crate::io::i2c::LinuxI2c;
 use crate::io::servo_pwm::ServoPwm;
 
 pub const THRUSTER_NAMES: [&str; 4] = ["thruster_1", "thruster_2", "thruster_3", "thruster_4"];
-// Label of the 40-pin header's GPIO controller on Raspberry Pi 5.
-const PI5_HEADER_CHIP_LABEL: &str = "pinctrl-rp1";
 
 pub struct ThrusterParameters {
     backend: ReadOnlyParameter<Arc<str>>,
@@ -33,7 +31,7 @@ impl ThrusterParameters {
                 .declare_parameter("thrusters.backend")
                 .default(Arc::<str>::from("dummy"))
                 .read_only()?,
-            // Empty: find the Pi 5 header by label. Otherwise a path such as /dev/gpiochip4.
+            // Empty: find the Pi 4 header by label. Otherwise a path such as /dev/gpiochip0.
             gpio_chip: node
                 .declare_parameter("thrusters.gpio_chip")
                 .default(Arc::<str>::from(""))
@@ -76,7 +74,7 @@ impl ThrusterParameters {
                 }
                 let chip = self.gpio_chip.get();
                 let chip = if chip.is_empty() {
-                    find_chip(PI5_HEADER_CHIP_LABEL).map_err(std::io::Error::other)?
+                    find_chip(HEADER_CHIP_LABEL).map_err(std::io::Error::other)?
                 } else {
                     chip.as_ref().into()
                 };

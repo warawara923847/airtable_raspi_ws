@@ -1,6 +1,6 @@
 # Installed by docs/sg90hv-rw.md. Exports the SG90-HV PWM channel at boot.
 [Unit]
-Description=Export RP1 PWM0 channel for the airtable SG90-HV
+Description=Export PWM0 channel for the airtable SG90-HV
 After=sysinit.target
 
 [Service]

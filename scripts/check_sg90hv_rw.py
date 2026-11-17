@@ -82,7 +82,7 @@ def main():
     node = rclpy.create_node(f'sg90hv_check_{os.getpid()}')
     with tempfile.TemporaryDirectory(prefix='airtable-sg90hv-') as directory:
         root = Path(directory)
-        pwm = root / 'pwm2'
+        pwm = root / 'pwm0'
         pwm.mkdir()
         for name, value in [('enable', '0'), ('period', '0'), ('duty_cycle', '0'),
                             ('polarity', 'normal')]:

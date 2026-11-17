@@ -73,6 +73,10 @@ impl OutputLine {
     }
 }
 
+/// Label of the 40-pin header's GPIO controller on Raspberry Pi 4 (BCM2711).
+/// The Pi 5 header was "pinctrl-rp1" (docs/adr/0021).
+pub const HEADER_CHIP_LABEL: &str = "pinctrl-bcm2711";
+
 /// Find a GPIO chip by label. Chip numbers are not stable across kernels (the Pi 5
 /// header has been gpiochip4 and gpiochip0), so the label identifies the header.
 pub fn find_chip(label: &str) -> Result<PathBuf, String> {
@@ -106,7 +110,7 @@ mod tests {
             .expect("set AIRTABLE_TEST_GPIO_LINE to a free BCM line")
             .parse()
             .unwrap();
-        let chip = find_chip("pinctrl-rp1").unwrap();
+        let chip = find_chip(HEADER_CHIP_LABEL).unwrap();
         let mut line = OutputLine::cdev(&chip, offset, "airtable_test").unwrap();
         let OutputLine::Cdev { request, .. } = &line else {
             unreachable!()

@@ -1,3 +1,4 @@
+// Pi 5 ONLY, unused on the current Pi 4 (docs/adr/0021): do not load it there.
 // Pi 5 / RP1 PWM0 clock setup for kernels reporting "failed to get clock rate".
 // Pair with the OS overlay: dtoverlay=pwm,pin=12,func=4
 // RP1_CLK_PWM0 = 17 (include/dt-bindings/clock/rp1.h, rpi-6.8.y).

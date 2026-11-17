@@ -1,4 +1,4 @@
-# Real I/O of airtable_hardware on Raspberry Pi 5, apart from the reaction wheel.
+# Real I/O of airtable_hardware on Raspberry Pi 4, apart from the reaction wheel.
 # Name it in hardware.params of a robot configuration (config/robots/*.yaml), or pass
 #   ros2 launch airtable_bringup hardware.launch.py \
 #     hardware_params:=package://airtable_bringup/config/hardware_pi.yaml
@@ -10,7 +10,7 @@
       # gpio: Linux GPIO character device. The valves are normally closed; lines are driven
       # low at start, at pulse end and at shutdown.
       backend: gpio
-      # Empty: the 40-pin header is found by its chip label (pinctrl-rp1).
+      # Empty: the 40-pin header is found by its chip label (pinctrl-bcm2711, gpiochip0).
       gpio_chip: ""
       # BCM numbers of thruster_1..4 (C sample VALVE1..4). Wiring not verified on hardware.
       gpio_lines: [19, 26, 20, 21]
