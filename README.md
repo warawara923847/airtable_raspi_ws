@@ -35,7 +35,8 @@ RealSense SDK は `realsense2_camera` の apt 依存で導入します。
 平面座標変換は Python / NumPy / `tf_transformations` を使っています。
 この経路の流用に追加の pip 版 OpenCV は不要です。
 依存関係は `airtable_tracking` / `airtable_estimator` の `package.xml` にも
-登録しています。トラッキング本体とlaunchは移植済みで、EKF設定は未実装です。
+登録しています。トラッキング本体とlaunchは移植済みで、EKFはArUco Poseのみの設定があります
+（[adr/0024](docs/adr/0024-pose-ekf-state-estimation.md)）。
 
 導入後の確認:
 
@@ -176,6 +177,7 @@ ros2 launch airtable_bringup hardware.launch.py \
   ARW-3m の実装は C サンプルと送信バイト列が一致することまで確認しています。
 - 実ピンの確認: `cd src/airtable_hardware && AIRTABLE_TEST_GPIO_LINE=19 cargo test -- --ignored real_gpio`
 - バルブを繋いだ確認（配線・番号・向き・最短パルス）は [バルブ確認手順](docs/valve-check.md)。
+  その後の力積・むだ時間・慣性の測定とパラメータ反映は [スラスタ力積の測定](docs/thruster-impulse.md)。
   `scripts/check_valves.py` が `pulse` を1本ずつ送ります。
 
 設計判断と検証値は
@@ -192,14 +194,14 @@ ros2 launch airtable_bringup hardware.launch.py \
 | `airtable_teleop` | C++ | ゲームパッド入力 → 手動指令 | 実装済み |
 | `airtable_bringup` | Python launch | 起動構成（実機 / シミュレーション） | 実装済み |
 | `airtable_description` | URDF/xacro | ロボットモデル | URDF と display launch のみ |
-| `airtable_estimator` | C++ | 外部Pose / IMUによる状態推定 | 依存定義のみ |
+| `airtable_estimator` | 設定のみ | 外部Pose / IMUによる状態推定 | robot_localization EKF設定（ArUco Poseのみ）、simで閉ループ検証済み |
 | `airtable_ground` | C++ | （未定義） | 未実装 |
 | `airtable_safety` | C++ | （未定義） | 未実装 |
 | `airtable_tracking` | Python / ament_cmake | マーカーから機体Pose観測を生成 | MuJoCo描画画像で検証済み、実機は未検証 |
 
-`airtable_estimator` / `airtable_ground` / `airtable_safety` の実行ノードは未実装で、
-ソース構成は `CMakeLists.txt` と `package.xml` のみです。`airtable_estimator` は
-役割と実行時依存を定義済みです。`airtable_ground` / `airtable_safety` は役割も未定義です。
+`airtable_estimator` は自前のノードを持たず、robot_localization `ekf_node` の設定
+`config/ekf_external_pose.yaml` だけを持ちます（起動はbringup）。
+`airtable_ground` / `airtable_safety` は `CMakeLists.txt` と `package.xml` のみで、役割も未定義です。
 
 ### データフロー
 
@@ -321,7 +323,9 @@ RVizでは目標軌道・目標姿勢が緑、実際の軌跡・姿勢が青で�
 このlaunchでは既定で仮想カメラとArUco検出器を起動しません。
 画像観測も比較したい場合は `tracking:=true` を追加します。simを二重起動せず、
 `/sim/camera/infra1/image_rect_raw` と `/robot_1/measurements/external_pose` を配信します。
-このオプションでも制御入力は真値のままで、カメラ観測による速度推定・EKF融合は未接続です。
+このオプションだけでは制御入力は真値のままです。`state_source:=estimator` を付けると、
+実機と同じく描画画像→ArUco→EKF（`/robot_1/state/odometry`）→制御の閉ループになります
+（検証は `scripts/check_sim_estimator.py --baseline`、[adr/0024](docs/adr/0024-pose-ekf-state-estimation.md)）。
 マーカーの形状・テクスチャは常にMJCFに残っています。機体マーカーを隠していた大きな
 RW表示siteは非表示のgroup 3へ分離しました。ViewerでSite 3を有効にすると表示できます。
 
@@ -367,7 +371,7 @@ ros2 service call /robot_1/trajectory/enable std_srvs/srv/SetBool '{data: true}'
 明示的な再開を要求します。既定の状態タイムアウトは0.25秒、パルス幅は10 msです。
 これは公称値で、実機の最小噴射時間・弁応答に合わせた調整が必要です。
 
-実機や外部推定器へ接続する場合は `plant:=real` を指定します。既定では出力無効です。
+実機へ接続する場合は `plant:=real` を指定します。既定では出力無効です。
 
 ```bash
 ros2 launch airtable_bringup trajectory.launch.py plant:=real trajectory:=line
@@ -375,9 +379,12 @@ ros2 launch airtable_bringup trajectory.launch.py plant:=real trajectory:=line
 
 状態入力は構成ファイルの `state_topic`（既定 `/robot_1/state/odometry`）で、
 `state_topic:=` で上書きできます。
-hardware・推定器は起動しません（カメラは `tracking:=true` のときだけ）。入力は新鮮な `nav_msgs/Odometry` とし、
-poseのframeは `table_1`、twistのframeは `robot_1/base_link` が既定です。
-実機の状態推定とスラスタI/Oは別途必要で、実機追従は未検証です。
+`plant:=real` の既定は `state_source:=estimator` で、ArUco PoseのEKFがこのトピックへOdometryを出し、
+`table_1 → robot_1/base_link` TFも配信します。外部の推定器を使う場合は `state_source:=external`。
+hardwareは起動しません（カメラは `tracking:=true` のときだけ）。入力は新鮮な `nav_msgs/Odometry` とし、
+poseのframeは `table_1`、twistのframeは `robot_1/base_link` が既定です。実機追従は未検証です。
+スラスタのみ（RWなし）の実機構成 `config/robots/single_robot_thrusters.yaml` と、事前のスラスタ力積の
+測定・パラメータ反映は [スラスタ力積の測定](docs/thruster-impulse.md) を参照してください。
 
 再現用の検証:
 
@@ -437,7 +444,7 @@ ros2 launch airtable_bringup hardware.launch.py robot_config:=$CFG/dual_robot.ya
 ros2 launch airtable_bringup hardware.launch.py robot_config:=$CFG/dual_robot.yaml robot:=robot_2
 # 観測（カメラ・ArUco → /robot_N/measurements/external_pose）。未設定の機体は拒否される
 ros2 launch airtable_bringup tracking.launch.py robot_config:=$CFG/dual_robot.yaml robot:=robot_1
-# 推定器が /robot_N/state/odometry を出してから機体ごとに有効化
+# 推定器（state_source:=estimator、既定）が /robot_N/state/odometry を出してから機体ごとに有効化
 ros2 service call /robot_2/trajectory/enable std_srvs/srv/SetBool "{data: true}"
 ```
 
@@ -456,7 +463,7 @@ ros2 service call /robot_2/trajectory/enable std_srvs/srv/SetBool "{data: true}"
   詳細は[0015](docs/adr/0015-per-table-camera-tracking.md)。
 - 実機の world 配置・カメラserial・マーカー・IMU取り付け・物性値は未測定のため設定していません。
   robot_2の実カメラ観測設定も未作成で、`tracking.launch.py robot:=robot_2` は拒否されます。
-- 実機閉ループ追従には速度推定／EKFと実スラスタI/Oが別途必要です（未検証）。
+- 実機閉ループ追従は未検証です（推定器はsimで検証済み、実スラスタは力積の測定前）。
 
 検証は `scripts/check_sim_multi_robot.py`（robot_2単独・2基同時・故障／指令／外乱の分離・
 録画・PC/Pi分離起動・設定エラー・テーブルごとのカメラ観測）。schema、DDS／時刻同期の運用条件、未実装範囲は
@@ -592,12 +599,27 @@ CSV・JSON・比較グラフに加え、乱数条件・独立サンプルの実�
 録画時も`--snapshot src/airtable_bringup/config/stochastic_disturbance.yaml`で条件を残せます。
 仕様と検証結果は[0013. 確率外乱](docs/adr/0013-stochastic-disturbance.md)を参照。
 
-### 実験ログの録画とFoxglove用MCAP
+### 実験ログの録画とFoxgloveでの表示
 
 録画対象は `src/airtable_bringup/config/recording.yaml` で管理します。
-sim / 実機のプロファイル、画像の追加、名前空間・保存先の切り替えに対応し、
+sim / 実機 / Pi のプロファイル、画像の追加、名前空間・保存先の切り替えに対応し、
 実験条件・設定ファイル・Git revisionをbagと一緒に保管できます。
 通常はMCAPへ直接録画し、既存のSQLite bagには変換コマンドを使用します。
+
+入口launchの`record:=true`で実験と一緒に録画し、PCでは`foxglove:=true`で
+Foxglove Bridge（`ws://localhost:8765`、既定で読み取り専用）を起動します。
+launch引数・構成ファイル・パラメータファイルは自動で保存し、Ctrl+Cで保存完了を待って終了します。
+
+```bash
+# sim
+ros2 launch airtable_bringup trajectory.launch.py trajectory:=circle tracking:=true \
+  foxglove:=true record:=true record_label:=circle_r020
+# 実機：PCとPiの両方で録る（Piは自分が受けた指令とIMU等だけ）
+ros2 launch airtable_bringup manual.launch.py plant:=real tracking:=true foxglove:=true record:=true
+ros2 launch airtable_bringup hardware.launch.py record:=true     # Pi
+```
+
+単独の録画コマンドも使えます。
 
 ```bash
 ros2 run airtable_bringup experiment_bag record --profile sim --dry-run
@@ -606,8 +628,9 @@ ros2 run airtable_bringup experiment_bag record --profile sim --label circle_r02
 ros2 run airtable_bringup experiment_bag convert /path/to/existing_bag
 ```
 
-ビルド、YAMLの拡張、条件・設定の保存、画像付き録画、Foxgloveでの再生は
-[実験ログの手順](src/airtable_bringup/README.md)を参照してください。
+ビルド、YAMLの拡張、条件・設定の保存、画像付き録画、Foxgloveでのライブ表示と再生は
+[実験ログの手順](src/airtable_bringup/README.md)、設計判断は
+[0022. 録画とFoxglove Bridgeをlaunch引数で起動する](docs/adr/0022-launch-recording-and-foxglove.md)を参照してください。
 
 ### SG90-HV（無限回転）によるARW-3mの代用RW
 
@@ -689,7 +712,9 @@ aruco_rosの検出TF `robot_1/aruco_marker_<ID>` の軸と重ねて校正のず�
 位置・姿勢を変換して取り付け位置を補正した後、平面Poseに射影します。
 欠測中は新しいPoseを出さず、重複・順序逆転した可動マーカー観測も出力しません。
 固定点は同一フレーム・指定時間幅内で全点が揃い、配置残差が閾値以下の場合だけ採用します。
-初期化後はカメラを固定する前提です。カメラを動かした場合や時刻を巻き戻すbag再生では
+初期化後はカメラを固定する前提で、固定マーカーの購読を解除します。aruco_rosの`single`は
+出力に購読者がいないと検出を行わないため、固定マーカー4本の検出ノードは以後ほぼ停止します
+（録画やFoxglove・RVizが同じトピックを購読している間は検出が続きます、[adr/0023](docs/adr/0023-sim-camera-90hz-and-fixed-marker-release.md)）。カメラを動かした場合や時刻を巻き戻すbag再生では
 ノードを再起動して再校正してください。機体TF・速度推定・EKFはこのノードでは配信しません。
 
 検証コマンド:
@@ -734,18 +759,20 @@ ros2 launch airtable_bringup manual.launch.py tracking:=true viewer:=false
 
 | トピック | 内容 |
 |---|---|
-| `/sim/camera/infra1/image_rect_raw` | 1280×960、mono8、既定30 Hzの描画画像 |
+| `/sim/camera/infra1/image_rect_raw` | 848×480、mono8、既定90 Hz（実機RealSenseに合わせた値）の描画画像 |
 | `/sim/camera/infra1/camera_info` | 描画投影と一致する内部パラメータ、歪みなし |
 | `/robot_1/measurements/external_pose` | 画像検出によるtable_1基準の機体Pose観測 |
 | `/robot_1/sim/ground_truth` | 物理計算による機体真値 |
 | `/clock` | シミュレーション時刻、100 Hz |
 
 カメラは `src/airtable_sim/mujoco/airtable.xml` の `tracking_camera` で、
-テーブル中心の高さ2.2 m、垂直画角55度です。位置・姿勢・画角を変える場合は
+テーブル中心の高さ1.3 m、垂直画角58度、848×480で、テーブルの長辺が画像の横になる向きです
+（実機D435の848×480に合わせた配置、[adr/0023](docs/adr/0023-sim-camera-90hz-and-fixed-marker-release.md)）。位置・姿勢・画角を変える場合は
 ここを編集してください。解像度を変える場合は `<global offwidth/offheight>` も
 描画解像度以上に設定します。内部パラメータはモデルの解像度と画角から計算します。
 これはD435のIR1相当の理想単眼モデルで、レンズ歪み・IR投光器・露光・ブレは再現しません。
-`camera_fps:=15.0` などで配信頻度を変更できます。描画や検出の負荷が高いと欠落が生じます。
+`camera_fps:=30.0` などで配信頻度を変更できます。描画や検出の負荷が高いと欠落が生じ、
+実際の配信頻度は設定値を下回ります（90 Hz設定でヘッドレス約66〜69 Hz、Viewerあり約59 Hz）。
 
 固定マーカー中心と取り付け位置は
 `src/airtable_tracking/config/simulation_tracking.yaml` にモデルと合わせて設定しています。

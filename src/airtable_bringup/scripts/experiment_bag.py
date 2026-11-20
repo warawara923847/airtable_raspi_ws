@@ -48,6 +48,20 @@ def string_list(value, name):
     return value
 
 
+def topic_items(value, name):
+    """Group entries: absolute topic strings, or {regex: pattern} for variable names."""
+    if not isinstance(value, list) or not value:
+        raise ValueError(f'{name} must be a nonempty list')
+    for item in value:
+        if isinstance(item, dict):
+            mapping(item, f'{name} entry', ['regex'])
+            if not isinstance(item.get('regex'), str) or not item['regex']:
+                raise ValueError(f'{name}: regex entries need a nonempty pattern')
+        elif not isinstance(item, str) or not item:
+            raise ValueError(f'{name} entries must be topic names or {{regex: pattern}}')
+    return value
+
+
 def ros_name(value):
     """Require fully qualified topic names without unresolved substitutions."""
     if not re.fullmatch(r'(/[A-Za-z_][A-Za-z0-9_]*)+', value):
@@ -82,24 +96,46 @@ def resolve_profile(args):
         'use_sim_time', 'groups', 'topics'])
     if type(profile.get('use_sim_time')) is not bool:
         raise ValueError('profile.use_sim_time must be true or false')
-    namespace = args.namespace if args.namespace is not None else defaults.get('namespace')
-    if not isinstance(namespace, str):
-        raise ValueError('namespace must be a string')
-    prefix = '/' + namespace.strip('/') if namespace.strip('/') else ''
-    if prefix:
-        ros_name(prefix)
+    namespaces = args.namespace or [defaults.get('namespace')]
+    prefixes = []
+    for namespace in namespaces:
+        if not isinstance(namespace, str):
+            raise ValueError('namespace must be a string')
+        prefix = '/' + namespace.strip('/') if namespace.strip('/') else ''
+        if prefix:
+            ros_name(prefix)
+        prefixes.append(prefix)
+    prefixes = list(dict.fromkeys(prefixes))
 
     def expand(topic):
-        return ros_name(topic.replace('{ns}', prefix))
+        """One name per namespace for {ns} topics, otherwise the topic itself."""
+        if '{ns}' not in topic:
+            return [ros_name(topic)]
+        return [ros_name(topic.replace('{ns}', prefix)) for prefix in prefixes]
+
+    def expand_regex(pattern):
+        # Namespaces are validated ROS names, so they contain no regex metacharacters.
+        expanded = [pattern.replace('{ns}', prefix) for prefix in prefixes] \
+            if '{ns}' in pattern else [pattern]
+        for value in expanded:
+            try:
+                re.compile(value)
+            except re.error as error:
+                raise ValueError(f'Invalid topic regex {value!r}: {error}') from None
+        return expanded
 
     selected = string_list(profile.get('groups', []), 'profile.groups') + args.include_group
-    topics = []
+    items = []
     for group in dict.fromkeys(selected):
         if group not in groups:
             raise ValueError(f'Unknown topic group {group!r}; choose from {list(groups)}')
-        topics.extend(string_list(groups[group], f'topic_groups.{group}'))
-    topics.extend(string_list(profile.get('topics', []), 'profile.topics'))
-    topics = list(dict.fromkeys(expand(topic) for topic in topics))
+        items.extend(topic_items(groups[group], f'topic_groups.{group}'))
+    items.extend(string_list(profile.get('topics', []), 'profile.topics'))
+    items.extend(string_list(getattr(args, 'topic', None) or [], '--topic'))
+    topics = list(dict.fromkeys(name for item in items if isinstance(item, str)
+                                for name in expand(item)))
+    regexes = list(dict.fromkeys(pattern for item in items if isinstance(item, dict)
+                                 for pattern in expand_regex(item['regex'])))
     if not topics:
         raise ValueError('The selected profile has no topics')
     if profile['use_sim_time'] and '/clock' not in topics:
@@ -114,17 +150,18 @@ def resolve_profile(args):
         if type(defaults.get(key, 0)) is not int or defaults.get(key, 0) < 0:
             raise ValueError(f'{key} must be a nonnegative integer')
     qos = mapping(config.get('qos_overrides', {}), 'qos_overrides')
-    resolved_qos = {expand(topic): mapping(value, f'qos_overrides.{topic}')
-                    for topic, value in qos.items() if expand(topic) in topics}
+    resolved_qos = {name: mapping(value, f'qos_overrides.{topic}')
+                    for topic, value in qos.items() for name in expand(topic)
+                    if name in topics}
     root = args.output_root or defaults.get('output_root', 'recordings')
     if not isinstance(root, str) or not root:
         raise ValueError('output_root must be a nonempty string')
     return {
-        'config_path': str(path), 'profile': args.profile, 'namespace': prefix,
+        'config_path': str(path), 'profile': args.profile, 'namespaces': prefixes,
         'output_root': str(Path(root).expanduser().resolve()),
         'storage': storage, 'storage_preset_profile': preset,
         'use_sim_time': profile['use_sim_time'], 'groups': list(dict.fromkeys(selected)),
-        'topics': topics, 'qos_overrides': resolved_qos,
+        'topics': topics, 'topic_regexes': regexes, 'qos_overrides': resolved_qos,
         'max_bag_duration': defaults.get('max_bag_duration', 0),
         'max_bag_size': defaults.get('max_bag_size', 0),
     }
@@ -142,6 +179,9 @@ def record_command(config, bag, qos_path):
         command += ['--use-sim-time']
     if config['qos_overrides']:
         command += ['--qos-profile-overrides-path', str(qos_path)]
+    if config['topic_regexes']:
+        # rosbag2 records the union of --topics and --regex (re.search, so anchor each).
+        command += ['--regex', '^(?:' + '|'.join(config['topic_regexes']) + ')$']
     return command + ['--topics', *config['topics']]
 
 
@@ -282,7 +322,8 @@ def record(args):
                              'sha256': hashlib.sha256(destination.read_bytes()).hexdigest()})
     manifest = {
         'version': 1, 'operation': 'record', 'label': args.label, 'note': args.note,
-        'metadata': metadata, 'profile': config['profile'], 'namespace': config['namespace'],
+        'metadata': metadata, 'profile': config['profile'],
+        'namespaces': config['namespaces'],
         'use_sim_time': config['use_sim_time'], 'git': git_context(), 'inputs': saved_inputs,
         'environment': {key: os.environ.get(key) for key in (
             'ROS_DISTRO', 'ROS_DOMAIN_ID', 'RMW_IMPLEMENTATION', 'ROS_LOCALHOST_ONLY',
@@ -348,7 +389,11 @@ def main(argv=None):
     recorder = subparsers.add_parser('record', help='Record a YAML topic profile')
     recorder.add_argument('--config', help='Custom recording YAML; default: package config')
     recorder.add_argument('--profile', required=True, help='Profile name in the YAML (sim/real)')
-    recorder.add_argument('--namespace', help='Robot namespace; overrides the YAML default')
+    recorder.add_argument('--namespace', action='append', default=[],
+                          help='Robot namespace for {ns}; repeat for several robots. '
+                               'Overrides the YAML default')
+    recorder.add_argument('--topic', action='append', default=[], metavar='TOPIC',
+                          help='Additional absolute topic; repeat to add several')
     recorder.add_argument('--include-group', action='append', default=[],
                           help='Additional topic group; repeat to add multiple groups')
     recorder.add_argument('--output-root', help='Output root, relative to the current directory')

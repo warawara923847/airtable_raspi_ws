@@ -10,8 +10,8 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 from airtable_bringup.robot_config import (
-    check_simulation_cameras, check_simulation_model, ConfigError, merge, select_robots,
-    yaml_argument)
+    check_simulation_cameras, check_simulation_model, ConfigError, merge, package_share,
+    resolve_path, select_robots, yaml_argument)
 import yaml
 
 PLANTS = ('sim', 'real')
@@ -222,6 +222,42 @@ def control_include(robot, *, use_sim_time, enabled, state_topic, launch_overrid
         launch_arguments=arguments.items())
 
 
+DEFAULT_ESTIMATOR_PARAMS = 'package://airtable_estimator/config/ekf_external_pose.yaml'
+STATE_SOURCES = ('truth', 'estimator', 'external')
+
+
+def estimator_params_path(params):
+    """Resolve estimator_params:= (empty: the pose-only EKF of airtable_estimator)."""
+    return resolve_path(params or DEFAULT_ESTIMATOR_PARAMS, Path.cwd(), 'estimator_params',
+                        share=package_share)
+
+
+def estimator_node(robot, *, params, use_sim_time, publish_tf, state_topic):
+    """
+    Start robot_localization's EKF on the ArUco pose of one robot (docs/adr/0024).
+
+    The frames follow the robot configuration: pose in the table frame, twist in
+    <namespace>/base_link. Its odometry/filtered output is remapped to state_topic, the
+    controller input. publish_tf adds table -> base_link (only where nothing else does).
+    """
+    from launch_ros.actions import Node
+
+    path = estimator_params_path(params)
+    namespace = robot['namespace']
+    return Node(
+        package='robot_localization', executable='ekf_node', name='airtable_estimator',
+        namespace=namespace, output='screen',
+        parameters=[str(path), {
+            'use_sim_time': use_sim_time,
+            'publish_tf': publish_tf,
+            'world_frame': robot['table_frame'],
+            'odom_frame': robot['table_frame'],
+            'map_frame': f'{namespace}/map',
+            'base_link_frame': robot['body_frame'],
+        }],
+        remappings=[('odometry/filtered', state_topic)])
+
+
 def table_tf_nodes(config, robots, logger):
     """Publish static world->table TF for calibrated tables only (hardware use)."""
     from launch_ros.actions import Node
@@ -381,3 +417,162 @@ def rviz_node(robots, *, simulation, fixed_frame, table_xy, use_sim_time):
                              table_xy=table_xy)
     return Node(package='rviz2', executable='rviz2', name='robots_rviz', output='screen',
                 arguments=['-d', str(path)], parameters=[{'use_sim_time': use_sim_time}])
+
+
+# Live viewing and recording, shared by manual / trajectory (PC) and hardware (Pi).
+RECORD_ARGUMENTS = [
+    ('record', 'false', 'Record an MCAP experiment with experiment_bag (config/recording.yaml); '
+                        'stop with Ctrl+C on this launch and wait for the bag to be saved'),
+    ('record_label', '', 'Experiment label (letters, digits, _ . -); empty: <launch>_<plant>'),
+    ('record_profile', '', 'Profile of the recording YAML; empty: sim / real (PC), hardware (Pi)'),
+    ('record_note', '', 'Free-form note saved in experiment.yaml'),
+    ('record_output_root', '', 'Output root; empty: recordings/ under the current directory'),
+    ('record_config', '', 'Recording YAML; empty: config/recording.yaml of airtable_bringup'),
+]
+PC_OBSERVATION_ARGUMENTS = [
+    ('foxglove', 'false', 'Start foxglove_bridge; open ws://<foxglove_address>:<foxglove_port> '
+                          'in Foxglove'),
+    ('foxglove_port', '8765', 'foxglove_bridge WebSocket port'),
+    ('foxglove_address', '127.0.0.1', 'foxglove_bridge listen address; 0.0.0.0 lets other '
+                                      'machines on the network connect'),
+    ('foxglove_readonly', 'true', 'true: Foxglove only views (no publishing, parameter changes '
+                                  'or service calls, so it cannot command the robot)'),
+    *RECORD_ARGUMENTS,
+    ('record_images', 'false', 'Also record the configured camera image and camera_info '
+                               '(large: the real camera is 848x480 at 90 Hz)'),
+]
+# Bridge capabilities without clientPublish / parameters / services (foxglove_bridge 3.x).
+FOXGLOVE_READONLY_CAPABILITIES = ['connectionGraph', 'assets']
+RECORD_LABEL = r'[A-Za-z0-9][A-Za-z0-9_.-]{0,79}'
+
+
+def foxglove_node(args, *, use_sim_time):
+    """Return the WebSocket bridge for Foxglove; read-only unless foxglove_readonly:=false."""
+    import re
+
+    from ament_index_python.packages import PackageNotFoundError, get_package_prefix
+    from launch_ros.actions import Node
+
+    try:
+        get_package_prefix('foxglove_bridge')
+    except PackageNotFoundError:
+        raise ConfigError('foxglove:=true needs foxglove_bridge '
+                          '(sudo apt install ros-jazzy-foxglove-bridge)') from None
+    if not re.fullmatch(r'[0-9]{1,5}', args['foxglove_port']) or not \
+            0 < int(args['foxglove_port']) < 65536:
+        raise ConfigError(f'foxglove_port must be 1-65535, got {args["foxglove_port"]!r}')
+    parameters = {'port': int(args['foxglove_port']), 'address': args['foxglove_address'],
+                  'use_sim_time': use_sim_time}
+    if is_true(args['foxglove_readonly']):
+        parameters['capabilities'] = FOXGLOVE_READONLY_CAPABILITIES
+    return Node(package='foxglove_bridge', executable='foxglove_bridge', name='foxglove_bridge',
+                output='screen', parameters=[parameters])
+
+
+def record_snapshots(config, robots, *, simulation):
+    """Return the files that define a run: robot configuration, parameters, model."""
+    paths = [config['path']]
+    if simulation and config.get('model') is not None:
+        paths.append(config['model'])
+    for robot in robots:
+        tracking = robot.get('tracking', {})
+        hardware = robot.get('hardware', {})
+        paths += [robot.get('trajectory_params'), robot.get('thruster_params'),
+                  tracking.get('simulation_params' if simulation else 'params'),
+                  None if simulation else hardware.get('params'),
+                  None if simulation else hardware.get('rw_params')]
+    return list(dict.fromkeys(str(path) for path in paths if path is not None))
+
+
+def image_topics(robots, *, simulation):
+    """Camera image and camera_info of each robot's observation, from the configuration."""
+    topics = []
+    for robot in robots:
+        tracking = robot.get('tracking', {})
+        camera = tracking.get('simulation') if simulation else tracking
+        if camera and camera.get('image_topic'):
+            topics += [camera['image_topic'], camera['camera_info_topic']]
+    return list(dict.fromkeys(topic for topic in topics if topic))
+
+
+def moving_marker_topics(robots, *, simulation):
+    """Raw ArUco pose of each robot's moving marker; fixed markers are left out (adr/0023)."""
+    topics = []
+    for robot in robots:
+        tracking = robot.get('tracking', {})
+        source = tracking.get('simulation') if simulation else tracking
+        if source and source.get('moving_marker_id') is not None:
+            topics.append(f"/{robot['namespace']}/tracking/aruco_single_"
+                          f"{source['moving_marker_id']}/pose")
+    return topics
+
+
+def record_process(args, *, entry, plant, profile, robots, snapshots, topics=()):
+    """
+    Run experiment_bag beside the launched system (README of airtable_bringup).
+
+    Every launch argument is saved as --meta launch.<name>=<value> and the given files as
+    --snapshot. The settings are checked with --dry-run before anything starts. On Ctrl+C
+    the launch forwards SIGINT; experiment_bag stops rosbag2 and waits for the MCAP to be
+    finalized, so it gets more time than the default 5 s before SIGTERM.
+    """
+    import re
+    import subprocess
+
+    from ament_index_python.packages import get_package_prefix
+    from launch.actions import ExecuteProcess
+
+    label = args['record_label'] or f'{entry}_{plant}'
+    if not re.fullmatch(RECORD_LABEL, label):
+        raise ConfigError(f'record_label must be 1-80 letters, digits, _ . or -, got {label!r}')
+    command = [str(Path(get_package_prefix('airtable_bringup'), 'lib', 'airtable_bringup',
+                        'experiment_bag')),
+               'record', '--profile', args['record_profile'] or profile, '--label', label]
+    for robot in robots:
+        command += ['--namespace', robot['namespace']]
+    for topic in topics:
+        command += ['--topic', topic]
+    for option in ('note', 'output_root', 'config'):
+        if args[f'record_{option}']:
+            command += [f'--{option.replace("_", "-")}', args[f'record_{option}']]
+    command += ['--meta', f'launch.file={entry}.launch.py', '--meta', f'launch.plant={plant}']
+    command += [item for name, value in args.items() if value != '' and name != 'plant'
+                for item in ('--meta', f'launch.{name}={value}')]
+    for path in snapshots:
+        command += ['--snapshot', path]
+    check = subprocess.run(command + ['--dry-run'], capture_output=True, text=True)
+    if check.returncode:
+        raise ConfigError('record:=true: ' + (check.stderr or check.stdout).strip())
+    return ExecuteProcess(cmd=command, name='experiment_bag', output='screen',
+                          sigterm_timeout='30', sigkill_timeout='10')
+
+
+def valve_state_node(robot, *, use_sim_time):
+    """Per-valve open/closed timeline from the pulse commands (scripts/valve_state.py)."""
+    from launch_ros.actions import Node
+
+    names = merge(robot['thruster_base'], robot['thruster_overrides'])['thrusters']['names']
+    return Node(package='airtable_bringup', executable='valve_state',
+                name='airtable_valve_state', namespace=robot['namespace'], output='screen',
+                parameters=[{'use_sim_time': use_sim_time, 'thruster_names': list(names)}])
+
+
+def pc_observation_actions(args, *, entry, plant, config, robots, snapshots=()):
+    """Start foxglove:= and record:= of the PC entry points (PC_OBSERVATION_ARGUMENTS)."""
+    simulation = plant == 'sim'
+    actions = []
+    if is_true(args['foxglove']) or is_true(args['record']):
+        # Display/recording aid only; nothing subscribes to it for control.
+        actions += [valve_state_node(robot, use_sim_time=simulation) for robot in robots]
+    if is_true(args['foxglove']):
+        actions.append(foxglove_node(args, use_sim_time=simulation))
+    if is_true(args['record']):
+        topics = moving_marker_topics(robots, simulation=simulation) \
+            if is_true(args['tracking']) else []
+        if is_true(args['record_images']):
+            topics += image_topics(robots, simulation=simulation)
+        actions.append(record_process(
+            args, entry=entry, plant=plant, profile=plant, robots=robots, topics=topics,
+            snapshots=[*record_snapshots(config, robots, simulation=simulation),
+                       *map(str, snapshots)]))
+    return actions

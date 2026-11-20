@@ -20,6 +20,7 @@ install(
         launch
         rviz
         config
+        foxglove
     DESTINATION share/${PROJECT_NAME}
 )
 
@@ -36,12 +37,17 @@ install(PROGRAMS scripts/robot_config.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME robot_config
 )
+install(PROGRAMS scripts/valve_state.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME valve_state
+)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_experiment_bag test/test_experiment_bag.py)
   ament_add_pytest_test(test_sim_disturbance test/test_sim_disturbance.py)
   ament_add_pytest_test(test_robot_config test/test_robot_config.py)
+  ament_add_pytest_test(test_valve_state test/test_valve_state.py)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files

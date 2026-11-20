@@ -10,12 +10,17 @@ hardware_params:=; e.g. config/hardware_pi.yaml for the GPIO valves), then the w
 file of hardware.rw (config/arw3m.yaml, config/sg90hv.yaml; hardware.rw_params to use
 another file), then the IMU frame. Without them every backend is dummy.
 The PC runs manual.launch.py or trajectory.launch.py with plant:=real.
+
+record:=true also records what this Pi receives and publishes (profile hardware of
+config/recording.yaml) to recordings/ under the current directory, independent of the
+Wi-Fi link; the PC records the full experiment with its own record:=true.
 """
 
 from pathlib import Path
 
 from airtable_bringup.launch_helpers import (
-    CONFIG_ARGUMENT, default_robot_config, entry_description, launch_arguments, select_one)
+    CONFIG_ARGUMENT, default_robot_config, entry_description, is_true, launch_arguments,
+    RECORD_ARGUMENTS, record_process, record_snapshots, select_one)
 from airtable_bringup.robot_config import load_robot_config, resolve_path
 from launch.actions import LogInfo
 from launch_ros.actions import Node
@@ -26,6 +31,7 @@ ARGUMENTS = [
     ('robot', '', 'Namespace of the robot this Pi drives; required with several robots'),
     ('hardware_params', '', 'ROS parameter file replacing hardware.params of the configuration '
                             '(path or package://...); empty: use the configuration'),
+    *RECORD_ARGUMENTS,
 ]
 
 
@@ -61,6 +67,10 @@ def setup(context):
             name='imu_mount_tf', namespace=robot['namespace'], output='log',
             arguments=[item for pair in zip(keys, map(str, mount)) for item in pair] + [
                 '--frame-id', robot['body_frame'], '--child-frame-id', hardware['imu_frame']]))
+    if is_true(args['record']):
+        actions.append(record_process(
+            args, entry='hardware', plant='real', profile='hardware', robots=[robot],
+            snapshots=record_snapshots(config, [robot], simulation=False)))
     return actions
 
 

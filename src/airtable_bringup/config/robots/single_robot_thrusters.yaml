@@ -1,0 +1,49 @@
+# Robot configuration (not a ROS parameter file): robot_1 driven by the thrusters only.
+# Same as single_robot.yaml except hardware: no reaction wheel (rw: none) and real valve GPIO
+# (hardware_pi.yaml). For the thruster measurement and thruster-only trajectory runs:
+#   Pi: ros2 launch airtable_bringup hardware.launch.py robot_config:=<this file>
+#   PC: ros2 launch airtable_bringup trajectory.launch.py plant:=real tracking:=true \
+#         robot_config:=<this file>
+# Keep the shared parts in sync with single_robot.yaml.
+# Schema, path rules and override precedence: airtable_bringup/robot_config.py and
+# docs/adr/0014-multi-robot-configuration.md.
+version: 1
+description: One table and robot_1, thrusters only (no reaction wheel), valve GPIO enabled.
+simulation:
+  model: package://airtable_sim/mujoco/airtable.xml
+tables:
+  table_1:
+    # Real world -> table_1 placement [x_m, y_m, yaw_rad]. null: not calibrated, no TF.
+    world_pose: null
+defaults:
+  trajectory_params: package://airtable_controller/config/trajectory.yaml
+  thruster_params: package://airtable_controller/config/thrusters.yaml
+robots:
+  - namespace: robot_1
+    table_frame: table_1
+    # Real/estimator Odometry input, relative to the namespace.
+    state_topic: state/odometry
+    simulation:
+      # airtable.xml keeps unprefixed actuator/sensor names (thruster_1_actuator, ...).
+      element_prefix: ''
+      # [x_m, y_m, yaw_rad] in table_1. null: circle edge for circles, else MJCF default.
+      initial_pose: null
+    tracking:
+      params: package://airtable_tracking/config/tracking.yaml
+      # Used by tracking:=true in simulation; requires the camera in airtable.xml.
+      simulation_params: package://airtable_tracking/config/simulation_tracking.yaml
+      # MJCF camera; tracking_camera keeps /sim/camera/infra1/* topics.
+      simulation_camera: tracking_camera
+      camera_frame: camera_infra1_optical_frame
+      image_topic: /camera/camera/infra1/image_rect_raw
+      camera_info_topic: /camera/camera/infra1/camera_info
+      marker_size: 0.1
+      camera_serial_no: null  # not recorded yet
+    hardware:
+      # Real valve GPIO. Verify the wiring with scripts/check_valves.py first (docs/valve-check.md).
+      params: package://airtable_bringup/config/hardware_pi.yaml
+      # No reaction wheel: the Pi does not drive the servo, the PC starts no RW control.
+      rw: none
+      # Default keeps the legacy single-robot frame.
+      imu_frame: imu_link
+      imu_mount: null  # base_link -> IMU [x,y,z,roll,pitch,yaw]; not measured

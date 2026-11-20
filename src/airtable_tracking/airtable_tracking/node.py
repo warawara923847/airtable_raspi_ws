@@ -84,16 +84,18 @@ class TrackingNode(Node):
             self.tf_buffer = Buffer()
             self.tf_listener = TransformListener(self.tf_buffer, self)
             self.static_broadcaster = StaticTransformBroadcaster(self)
-        self.marker_subscriptions = [
+        # Dropped after calibration: aruco_ros single skips detection while its outputs have
+        # no subscribers, so the fixed-marker detectors then idle (unless recorded/viewed).
+        self.fixed_subscriptions = [
             self.create_subscription(
                 PoseStamped, f'tracking/aruco_single_{mid}/pose',
                 partial(self.fixed_callback, marker_id=mid), qos_profile_sensor_data
             ) for mid in fixed_ids
         ]
-        self.marker_subscriptions.append(self.create_subscription(
+        self.moving_subscription = self.create_subscription(
             PoseStamped, f'tracking/aruco_single_{moving_id}/pose',
             self.moving_callback, qos_profile_sensor_data
-        ))
+        )
         self.get_logger().info('Waiting for fixed markers to calibrate the table frame')
 
     def fixed_callback(self, msg, marker_id):
@@ -106,7 +108,11 @@ class TrackingNode(Node):
             self.get_logger().warning(str(error), throttle_duration_sec=2.0)
             return
         if calibrated:
-            self.get_logger().info(f'Table calibration complete: {self.table_frame}')
+            self.get_logger().info(f'Table calibration complete: {self.table_frame}; '
+                                   'unsubscribed from the fixed markers')
+            for subscription in self.fixed_subscriptions:
+                self.destroy_subscription(subscription)
+            self.fixed_subscriptions = []
             if self.camera_tf_frame:
                 self.camera_tf_timer = self.create_timer(0.5, self.publish_camera_tf)
                 self.publish_camera_tf()

@@ -18,4 +18,4 @@
     base_height: 0.01
     calibration_max_time_span: 0.15
     calibration_max_residual: 0.02
-    pose_covariance_diagonal: [0.001, 0.001, 1000000.0, 1000000.0, 1000000.0, 0.01]
+    pose_covariance_diagonal: [4.0e-5, 4.0e-5, 1000000.0, 1000000.0, 1000000.0, 1.0e-4]

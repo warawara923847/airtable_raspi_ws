@@ -1,5 +1,9 @@
-# Topic names are absolute after expanding {ns}; --namespace overrides robot_1.
+# Topic names are absolute after expanding {ns}; --namespace overrides robot_1 and may be
+# repeated (one copy of every {ns} topic per robot). Group entries are topic names or
+# {regex: pattern} for names that depend on the configuration (marker IDs); patterns are
+# matched against the whole topic name.
 # New experiment conditions normally reuse these profiles and change --label/--meta.
+# The launch files' record:=true chooses sim/real (PC) or hardware (Pi) automatically.
 version: 1
 defaults:
   namespace: robot_1
@@ -21,8 +25,11 @@ topic_groups:
     - '{ns}/wrench_cmd'
     - '{ns}/actuators/thrusters/setpoint'
     - '{ns}/actuators/thrusters/pulse'
+    - '{ns}/actuators/thrusters/valve_state'  # per-valve commanded open/closed (valve_state)
     - '{ns}/actuators/reaction_wheels/command'
+    - '{ns}/actuators/reaction_wheels/speed_command'  # hardware.rw: sg90hv
     - '{ns}/actuators/reaction_wheels/state'
+    - '{ns}/rw_attitude/debug'  # sg90hv attitude PID: yaw reference, yaw, command
     - '{ns}/trajectory/reference'
     - '{ns}/trajectory/path'
     - '{ns}/trajectory/actual_path'
@@ -41,6 +48,10 @@ topic_groups:
   tracking:
     - '{ns}/measurements/external_pose'
     - '{ns}/state/odometry'  # reserved estimator output; currently not implemented
+    - '{ns}/tracking/layout'  # table outline and fixed markers (latched)
+    # Raw ArUco poses are not listed here: subscribing to a fixed marker keeps its detector
+    # running after calibration (docs/adr/0023). record:=true adds the moving marker's
+    # {ns}/tracking/aruco_single_<moving_marker_id>/pose from the robot configuration.
   sim_images:
     - /sim/camera/infra1/image_rect_raw
     - /sim/camera/infra1/camera_info
@@ -49,6 +60,19 @@ topic_groups:
     - /camera/camera/infra1/image_rect_raw
     - /camera/camera/infra1/camera_info
 
+  # Topics the Raspberry Pi itself receives and publishes (hardware.launch.py record:=true).
+  # A local copy survives Wi-Fi gaps; the PC's real profile still has the full picture.
+  pi_hardware:
+    - /rosout
+    - /tf_static
+    - '{ns}/actuators/thrusters/pulse'
+    - '{ns}/actuators/reaction_wheels/command'
+    - '{ns}/actuators/reaction_wheels/speed_command'
+    - '{ns}/actuators/reaction_wheels/state'
+    - '{ns}/actuators/xy_table/trajectory'
+    - '{ns}/imu/data_raw'
+    - '{ns}/joint_states'
+
 profiles:
   sim:
     use_sim_time: true
@@ -56,8 +80,13 @@ profiles:
   real:
     use_sim_time: false
     groups: [common, control, hardware, tracking]
-  # Two-robot profiles (config/robots/dual_robot.yaml). Topics are listed explicitly
-  # because {ns} expands to one namespace only; --namespace does not affect them.
+  # Raspberry Pi local recording; the PC records the real profile at the same time.
+  hardware:
+    use_sim_time: false
+    groups: [pi_hardware]
+  # Two-robot profiles (config/robots/dual_robot.yaml) with a fixed, smaller topic list;
+  # --namespace does not affect them. For everything the single-robot profiles record,
+  # use --profile sim|real --namespace robot_1 --namespace robot_2 (what record:=true does).
   dual_sim:
     use_sim_time: true
     groups: [common]
@@ -121,5 +150,20 @@ profiles:
 qos_overrides:
   /tf_static:
     history: keep_all
+    reliability: reliable
+    durability: transient_local
+  '{ns}/trajectory/path':
+    history: keep_last
+    depth: 1
+    reliability: reliable
+    durability: transient_local
+  '{ns}/trajectory/active':
+    history: keep_last
+    depth: 1
+    reliability: reliable
+    durability: transient_local
+  '{ns}/tracking/layout':
+    history: keep_last
+    depth: 1
     reliability: reliable
     durability: transient_local

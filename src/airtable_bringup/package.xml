@@ -16,6 +16,8 @@
   <exec_depend>rcl_interfaces</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>airtable_interfaces</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
@@ -37,6 +39,8 @@
   <exec_depend>airtable_hardware</exec_depend>
   <exec_depend condition="$AIRTABLE_BUILD_TARGET != pi">airtable_sim</exec_depend>
   <exec_depend condition="$AIRTABLE_BUILD_TARGET != pi">airtable_tracking</exec_depend>
+  <!-- foxglove:=true of the PC launch files; the Pi only records. -->
+  <exec_depend condition="$AIRTABLE_BUILD_TARGET != pi">foxglove_bridge</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>

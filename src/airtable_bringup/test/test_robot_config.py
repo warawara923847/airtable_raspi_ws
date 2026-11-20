@@ -69,6 +69,15 @@ class RobotConfigTest(unittest.TestCase):
         for robot in self.load('dual_robot.yaml')['robots']:
             self.assertEqual((robot['hardware']['rw'], robot['hardware']['rw_params']),
                              ('none', None))
+        # Thruster-only variant: no wheel, real valve GPIO, otherwise the single-robot setup.
+        thrusters = self.load('single_robot_thrusters.yaml')['robots'][0]
+        self.assertEqual((thrusters['hardware']['rw'], thrusters['hardware']['rw_params']),
+                         ('none', None))
+        self.assertEqual(thrusters['hardware']['params'],
+                         PACKAGE / 'config' / 'hardware_pi.yaml')
+        reference = self.load('single_robot.yaml')['robots'][0]
+        for key in ('namespace', 'table_frame', 'state_topic', 'tracking', 'simulation'):
+            self.assertEqual(thrusters[key], reference[key], key)
         arw3m = rc.load_robot_config(self.write(self.dual_text(
             '    hardware: {rw: arw3m}')), share)['robots'][1]['hardware']
         self.assertEqual(arw3m['rw_params'], PACKAGE / 'config' / 'arw3m.yaml')
@@ -289,7 +298,8 @@ class RobotConfigTest(unittest.TestCase):
                           'sim_table_2_camera_infra1_optical_frame'])
         self.assertEqual([s['marker_ids'] for s in sims], [[10, 11, 12, 13], [20, 21, 22, 23]])
         self.assertEqual([s['moving_marker_id'] for s in sims], [50, 51])
-        for name in ('single_robot.yaml', 'dual_robot.yaml', 'robot_2_only.yaml'):
+        for name in ('single_robot.yaml', 'single_robot_thrusters.yaml', 'dual_robot.yaml',
+                     'robot_2_only.yaml'):
             config = self.load(name)
             rc.check_simulation_cameras(config['model'], config['robots'])
         # Real tracking of robot_2 stays unconfigured; only simulation is set.

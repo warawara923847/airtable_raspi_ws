@@ -15,6 +15,7 @@ Examples (Pi: hardware.launch.py hardware_params:=.../hardware_pi.yaml must be r
 """
 
 import argparse
+import os
 from pathlib import Path
 import sys
 import time
@@ -99,8 +100,11 @@ def main():
         deadline = time.monotonic() + args.discovery_timeout_s
         while publisher.get_subscription_count() == 0:
             if time.monotonic() > deadline:
+                peers = os.environ.get('ROS_STATIC_PEERS')
                 print(f'{topic} の購読者が見つからない。Piで hardware.launch.py が動いているか、'
-                      'ROS_DOMAIN_ID が合っているかを確認する', file=sys.stderr)
+                      'ROS_DOMAIN_ID が合っているかを確認する。マルチキャストの通らない'
+                      'ネットワークでは export ROS_STATIC_PEERS=<PiのIP> が必要'
+                      f'（現在: {peers or "未設定"}）', file=sys.stderr)
                 return 1
             rclpy.spin_once(node, timeout_sec=0.1)
         # Discovery of the reverse direction can lag behind; do not lose the first pulse.

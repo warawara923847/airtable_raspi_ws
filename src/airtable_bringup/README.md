@@ -1,11 +1,15 @@
-# 実験ログの録画とMCAP変換
+# 実験ログの録画・MCAP変換・Foxglove表示
 
-実験の起動と録画を独立させ、同じ録画コマンドをMuJoCo、手動操作、軌道追従、
-Raspberry Pi上の実験に使います。録画コマンド自身はsim・hardware・制御を起動しません。
+同じ録画コマンド`experiment_bag`をMuJoCo、手動操作、軌道追従、Raspberry Pi上の実験に使います。
+通常は入口launchの`record:=true`で実験と一緒に起動し（[launchから録画する](#launchから録画するrecordtrue)）、
+`ros2 run airtable_bringup experiment_bag record`で単独でも起動できます。
+録画コマンド自身はsim・hardware・制御を起動しません。
 
 ROS 2のrosbagはMCAPを保存形式に選べます。通常は**直接MCAPへ録画**し、既存の
-SQLite bagだけ変換します。ライブ表示用のFoxglove BridgeやFoxgloveへのログインは
-録画には不要です。クラウドへのアップロードは別途行います。
+SQLite bagだけ変換します。実行中の表示はPCの`foxglove:=true`（Foxglove Bridge）で行います
+（[Foxgloveでライブ表示する](#foxgloveでライブ表示するfoxglovetrue)）。録画にはBridgeも
+Foxgloveへのログインも不要です。クラウドへのアップロードは別途行います。
+設計判断は[adr/0022](../../docs/adr/0022-launch-recording-and-foxglove.md)。
 
 ## 準備
 
@@ -13,6 +17,8 @@ SQLite bagだけ変換します。ライブ表示用のFoxglove BridgeやFoxglov
 sudo apt install ros-jazzy-ros2bag ros-jazzy-rosbag2-transport \
   ros-jazzy-rosbag2-py ros-jazzy-rosbag2-storage-mcap \
   ros-jazzy-rosbag2-storage-sqlite3 python3-yaml
+# PCだけ。ライブ表示用（Piには不要）
+sudo apt install ros-jazzy-foxglove-bridge
 
 cd ~/Documents/airtable_raspi_ws
 source /opt/ros/jazzy/setup.bash
@@ -25,7 +31,110 @@ source install/setup.bash
 ビルド前にソースから動かす場合は、`ros2 run airtable_bringup experiment_bag`の代わりに
 `/usr/bin/python3 src/airtable_bringup/scripts/experiment_bag.py`を使用できます。
 
-## 基本の録画
+## launchから録画する（record:=true）
+
+PCの`manual.launch.py` / `trajectory.launch.py`とPiの`hardware.launch.py`は`record:=true`で
+`experiment_bag`を一緒に起動します。終了は**launchのCtrl+C**だけで、録画の書き込み完了を
+待ってから終わります（最大30秒待ち、その後SIGTERM）。
+
+```bash
+# sim：プロファイルsim。tracking:=trueなら観測も入る
+ros2 launch airtable_bringup trajectory.launch.py trajectory:=circle radius:=0.20 \
+  tracking:=true record:=true record_label:=circle_r020 record_note:='公称1 kgモデル'
+
+# 実機：PCでプロファイルreal（PCの指令・観測とDDS越しのPiのトピック）
+ros2 launch airtable_bringup manual.launch.py plant:=real tracking:=true \
+  record:=true record_label:=manual_trial01
+# Pi：プロファイルhardware（Piが受けた指令と出したIMU等だけ）。Wi-Fiが詰まっても残る
+ros2 launch airtable_bringup hardware.launch.py record:=true record_label:=manual_trial01
+```
+
+| 引数 | 既定 | 内容 |
+|---|---|---|
+| `record` | `false` | 録画する |
+| `record_label` | `<launch名>_<plant>` | 実験名（英数字・`_`・`.`・`-`、80文字まで） |
+| `record_profile` | 空 | 空ならPCは`sim`/`real`、Piは`hardware` |
+| `record_images` | `false` | PCのみ。構成ファイルの`tracking`にある画像とcamera_infoも録る |
+| `record_note` | 空 | `experiment.yaml`へのメモ |
+| `record_output_root` | 空 | 空なら起動したディレクトリの`recordings/` |
+| `record_config` | 空 | 録画YAML。空なら`config/recording.yaml` |
+
+`record:=true`では次を自動で保存するので、`--meta` / `--snapshot`を手で揃える必要はありません。
+
+- 全てのlaunch引数（`launch.<名前>=<値>`、`launch.file`、`launch.plant`）を`experiment.yaml`の`metadata`へ
+- 構成ファイル（`config/robots/*.yaml`）、選んだ機体の軌道・スラスタ・tracking・hardwareの
+  パラメータファイル、simのMJCFを`inputs/`へ
+- 2基構成では選んだ全機体を`--namespace`で渡し、`{ns}`のトピックを機体ごとに録る
+
+起動前に`--dry-run`で設定を検証し、プロファイル名やラベルの誤りがあれば何も起動しません。
+PiとPCの録画は別々のディレクトリになるので、同じ`record_label`にしておくと対応が分かります。
+PCで録ったPi由来のトピックはPCの受信時刻、header.stampはPiの時計で、両者には数十msの差があります
+（[adr/0020](../../docs/adr/0020-pc-pi-link-latency.md)）。
+
+## Foxgloveでライブ表示する（foxglove:=true）
+
+PCの`manual.launch.py` / `trajectory.launch.py`に`foxglove:=true`を付けると`foxglove_bridge`を
+起動します。Foxglove（デスクトップアプリかブラウザ）で「Open connection」→
+「Foxglove WebSocket」→`ws://localhost:8765`を開きます。
+
+```bash
+ros2 launch airtable_bringup trajectory.launch.py trajectory:=circle tracking:=true foxglove:=true
+ros2 launch airtable_bringup manual.launch.py plant:=real tracking:=true foxglove:=true record:=true
+```
+
+| 引数 | 既定 | 内容 |
+|---|---|---|
+| `foxglove` | `false` | Bridgeを起動する |
+| `foxglove_port` | `8765` | WebSocketのポート |
+| `foxglove_address` | `127.0.0.1` | 待ち受けアドレス。別PCのFoxgloveから見るときは`0.0.0.0` |
+| `foxglove_readonly` | `true` | 表示のみ。publish・パラメータ変更・サービス呼び出しを禁止する |
+
+- 既定は読み取り専用です。Foxgloveのパネルから実機へ指令トピックを送れないようにしています。
+  パラメータの変更やサービス呼び出し（`trajectory/enable`など）が必要なときだけ
+  `foxglove_readonly:=false`にしてください。
+- simでは`use_sim_time`で動き、Foxgloveの時刻もsim時刻です。
+- 実機ではPiにBridgeを入れず、PCのBridgeがDDS越しにPiのトピック（IMU等）も配信します。
+- 3Dパネルの表示座標系は`table_1`、テーブル枠と既知マーカーは`/robot_1/tracking/layout`です。
+- 実カメラの画像（848×480×90 Hz）は帯域が大きいので、別PCから見る場合は画像パネルを必要な時だけ開きます。
+- 起動済みのsimへ後から繋ぐ場合は
+  `ros2 launch foxglove_bridge foxglove_bridge_launch.xml use_sim_time:=true`
+  （こちらはBridgeの既定どおり読み書き可能・全アドレスで待ち受け）。
+
+### 用意したレイアウト
+
+[foxglove/airtable_robot_1.json](foxglove/airtable_robot_1.json)（robot_1用）を、Foxgloveの
+「Layouts」→「Import from file」で読み込みます。ライブ接続にも、録画したMCAPにも使えます。
+
+| タブ | パネル | 内容 |
+|---|---|---|
+| 軌跡・アクチュエータ | XY軌跡（table_1） | 目標`trajectory/reference`（破線）、マーカー観測`measurements/external_pose`、simの真値`sim/ground_truth`（点線）をx–y平面に重ねる |
+| | バルブ開閉 | thruster_1〜4の開（赤）・閉（灰）の帯。`actuators/thrusters/valve_state`（下記） |
+| | RW 回転速度・速度指令 | 角速度（sim・ARW-3m）と正規化速度指令（SG90-HV、右軸） |
+| | RW トルク | トルク指令`command`と適用トルク`state.applied_torques` |
+| 3D・カメラ | 上面図 | テーブル枠・既知マーカー、目標経路`trajectory/path`、実軌跡、各Pose |
+| | 機体マーカー検出 | `tracking/aruco_single_50/result`（sim・実機共通） |
+| 姿勢・追従誤差 | yaw / 追従誤差 / RW姿勢PID | yawの比較、`trajectory/error`、SG90-HVの`rw_attitude/debug` |
+
+- そのモードで出ないトピックの系列は空のままです。目標と追従誤差は`trajectory.launch.py`だけ、
+  RWトルク指令は手動（軌道追従ではRW制御を止める）、速度指令とPIDはSG90-HV実機だけ、真値はsimだけです。
+- XY軌跡は時刻順に点をつないで描くので、再生位置までの軌跡になります。縦横の縮尺は自動で、
+  1:1にはなりません。形の比較には「3D・カメラ」の上面図を使ってください。
+- 別の機体を見るときは、JSON中の`/robot_1/`を置き換えたものを読み込みます。
+
+**バルブ開閉トピック** `ThrusterPulseCommand`は「開くバルブ名の配列＋1つの時間幅」なので、
+そのままではバルブごとに描けません。`foxglove:=true`または`record:=true`のときに、各機体へ
+`valve_state`ノード（[scripts/valve_state.py](scripts/valve_state.py)）を起動し、
+`sensor_msgs/JointState`（`name`＝スラスタ名、`position`＝1.0開／0.0閉）を
+`{ns}/actuators/thrusters/valve_state`に出します。
+
+- 開閉の各変化を、パルス到着とその終了の時刻を`header.stamp`に入れて1件ずつ送り、加えて10 Hzで現状を送る。
+  パネルは`headerStamp`で描くので、10 msのパルスも幅どおりに表示されます。
+- 新しいパルスは、hardware・simと同じく「今から時間幅」で閉時刻を上書きします（延長しない）。
+- **指令から計算した状態**で、実測ではありません。実機ではPiがWi-Fi遅延の後に開き、5 msの
+  タイマで閉じます。hardwareの`max_pulse_ms`による制限も反映しません。
+- 録画の`sim`/`real`プロファイルにも含まれます。古いbagには入っていません。
+
+## 単独で録画する
 
 まずYAMLから解決したトピック・QoS・時刻・コマンドを確認します。ファイルは生成しません。
 
@@ -98,6 +207,10 @@ ros2 run airtable_bringup experiment_bag record \
 
 ## 2テーブル2基構成の録画
 
+`--namespace`は複数指定でき、`{ns}`のトピックを機体ごとに展開します
+（`--profile sim --namespace robot_1 --namespace robot_2`。launchの`record:=true`はこの形）。
+`--topic /abs/topic`で任意のトピックを追加できます。
+
 `dual_sim`／`dual_real`は両機の絶対トピック（状態・目標・誤差・有効状態・wrench・
 setpoint・pulse、simでは外乱とIMU、実機では観測・IMU）と`/tf`・`/tf_static`を列挙した
 プロファイルです。`--namespace`は影響しません。構成ファイルと、機体別に解決した
@@ -156,6 +269,19 @@ ros2 run airtable_bringup experiment_bag record \
 グローバルな`/tf`や`/clock`、カメラ名は`--namespace`では変わりません。
 RealSenseの名前は環境で異なるため、`real_images`を実際の`ros2 topic list`と照合してください。
 単体hardware起動のように名前空間がない場合は`--namespace /`を指定します。
+
+グループの要素には、IDなど構成で変わる名前のために`{regex: パターン}`を書けます
+（例: `regex: '{ns}/tracking/odometry_[0-9]+'`）。パターンはトピック名全体に一致させます。
+固定マーカーの生Pose（`aruco_single_<固定ID>/pose`）は録画しません。購読すると校正後も検出が
+続くためです。機体マーカーの生Poseは `record:=true tracking:=true` のときlaunchが構成ファイルの
+IDから `--topic` で追加します（[adr/0023](../../docs/adr/0023-sim-camera-90hz-and-fixed-marker-release.md)）。
+
+| プロファイル | 時刻 | 用途 |
+|---|---|---|
+| `sim` | sim | PCのsim。指令・真値・外乱・IMU・観測（layoutを含む。機体マーカーの生Poseはlaunchが追加） |
+| `real` | システム | PCの実機実験。指令・観測・PiのIMU/joint_states・sg90hvのRW指令とPIDデバッグ |
+| `hardware` | システム | Pi自身。Piが受けた指令とPiが出すIMU・joint_states・RW state |
+| `dual_sim` / `dual_real` | | 2基の固定リスト（互換用） |
 
 未配信のトピックを含むグループも選べます。終了時に実際のメッセージ件数と未取得の
 トピックを報告するので、必須のセンサが記録されたか確認してください。

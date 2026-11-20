@@ -323,7 +323,7 @@ mod tests {
         let mut data = MjData::new(Box::new(model));
         data.forward();
         for ((id, width, height), table) in resolved.iter().zip(["table_1", "table_2"]) {
-            assert_eq!((*width, *height), (1280, 960));
+            assert_eq!((*width, *height), (848, 480));
             let table_id = data.model().body(table).unwrap().id;
             assert_eq!(data.model().cam_bodyid()[*id] as usize, table_id);
             let table_xy = data.xpos()[table_id];

@@ -3293,7 +3293,7 @@ version = "3.1.1"
 
 [[patch.unused]]
 name = "ros_gz_interfaces"
-version = "1.0.24"
+version = "1.0.25"
 
 [[patch.unused]]
 name = "rosbag2_interfaces"

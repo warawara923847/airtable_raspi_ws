@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .read_only()?;
     let fps_param = node
         .declare_parameter("camera_fps")
-        .default(30.0)
+        .default(90.0)
         .read_only()?;
     // Legacy single-robot form: applies to robot_1 only.
     let initial_pose_param = node

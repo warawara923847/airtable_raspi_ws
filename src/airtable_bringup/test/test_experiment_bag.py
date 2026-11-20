@@ -5,6 +5,7 @@ import contextlib
 import importlib.util
 import io
 from pathlib import Path
+import re
 import tempfile
 import unittest
 
@@ -24,7 +25,8 @@ class RecordingConfigTest(unittest.TestCase):
     def arguments(self, **overrides):
         """Build the options shared by profile resolution checks."""
         values = {'config': str(PACKAGE / 'config/recording.yaml'), 'profile': 'sim',
-                  'namespace': None, 'include_group': [], 'output_root': None, 'storage': None}
+                  'namespace': [], 'include_group': [], 'output_root': None, 'storage': None,
+                  'topic': []}
         return argparse.Namespace(**(values | overrides))
 
     def test_sim_and_real_keep_distinct_clocks(self):
@@ -44,7 +46,7 @@ class RecordingConfigTest(unittest.TestCase):
     def test_namespace_images_and_duplicate_groups(self):
         """Reuse a profile on another robot without changing global camera topics."""
         config = bag.resolve_profile(self.arguments(
-            namespace='/robot_2/', include_group=['sim_images', 'control']))
+            namespace=['/robot_2/'], include_group=['sim_images', 'control']))
         self.assertIn('/robot_2/actuators/thrusters/pulse', config['topics'])
         self.assertIn('/sim/camera/infra1/image_rect_raw', config['topics'])
         self.assertFalse(any('/robot_1/' in topic for topic in config['topics']))
@@ -53,12 +55,53 @@ class RecordingConfigTest(unittest.TestCase):
 
     def test_root_namespace(self):
         """An unnamespaced standalone hardware node can use the same groups."""
-        config = bag.resolve_profile(self.arguments(namespace='/', profile='real'))
+        config = bag.resolve_profile(self.arguments(namespace=['/'], profile='real'))
         self.assertIn('/imu/data_raw', config['topics'])
+
+    def test_several_namespaces_regex_and_extra_topics(self):
+        """record:=true of a two-robot launch: every {ns} topic and pattern once per robot."""
+        recording = yaml.safe_load((PACKAGE / 'config/recording.yaml').read_text())
+        recording['topic_groups']['tracking'].append(
+            {'regex': '{ns}/tracking/aruco_single_[0-9]+/pose'})
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, 'recording.yaml')
+            path.write_text(yaml.safe_dump(recording))
+            config = bag.resolve_profile(self.arguments(
+                config=str(path), namespace=['robot_1', 'robot_2', 'robot_1'],
+                topic=['/sim/table_2/camera/x']))
+        self.assertEqual(config['namespaces'], ['/robot_1', '/robot_2'])
+        for robot in ('robot_1', 'robot_2'):
+            self.assertIn(f'/{robot}/sim/ground_truth', config['topics'])
+            self.assertIn(f'/{robot}/trajectory/path', config['qos_overrides'])
+        self.assertEqual(config['topics'].count('/clock'), 1)
+        self.assertIn('/sim/table_2/camera/x', config['topics'])
+        command = bag.record_command(config, Path('/tmp/bag'), Path('/tmp/qos.yaml'))
+        pattern = re.compile(command[command.index('--regex') + 1])
+        self.assertTrue(pattern.search('/robot_2/tracking/aruco_single_21/pose'))
+        for other in ('/robot_2/tracking/aruco_single_21/debug',
+                      '/robot_3/tracking/aruco_single_21/pose', '/x/robot_1/tracking/'
+                      'aruco_single_1/pose'):
+            self.assertFalse(pattern.search(other), other)
+
+    def test_fixed_markers_are_not_subscribed(self):
+        """A recorded fixed-marker pose would keep its detector running (adr/0023)."""
+        config = bag.resolve_profile(self.arguments())
+        self.assertFalse(any('aruco_single' in topic for topic in config['topics']))
+        self.assertNotIn('--regex', bag.record_command(config, Path('b'), Path('q')))
+
+    def test_pi_hardware_profile(self):
+        """The Pi records only its own inputs/outputs, with the system clock."""
+        config = bag.resolve_profile(self.arguments(profile='hardware'))
+        self.assertFalse(config['use_sim_time'])
+        self.assertIn('/robot_1/actuators/thrusters/pulse', config['topics'])
+        self.assertIn('/robot_1/actuators/reaction_wheels/speed_command', config['topics'])
+        self.assertFalse(any('/trajectory/' in t or '/tracking/' in t for t in config['topics']))
+        self.assertNotIn('--regex', bag.record_command(config, Path('b'), Path('q')))
 
     def test_reject_unknown_groups_and_invalid_names(self):
         """Catch misspellings before creating any experiment directory."""
-        for values in ({'include_group': ['images_typo']}, {'namespace': '../robot'}):
+        for values in ({'include_group': ['images_typo']}, {'namespace': ['../robot']},
+                       {'topic': ['relative/topic']}):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 bag.resolve_profile(self.arguments(**values))
 
@@ -67,7 +110,7 @@ class RecordingConfigTest(unittest.TestCase):
         original = yaml.safe_load((PACKAGE / 'config/recording.yaml').read_text())
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / 'config.yaml'
-            for mutation in ('clock', 'typo', 'boolean', 'empty'):
+            for mutation in ('clock', 'typo', 'boolean', 'empty', 'regex'):
                 config = yaml.safe_load(yaml.safe_dump(original))
                 if mutation == 'clock':
                     config['topic_groups']['simulation'].remove('/clock')
@@ -75,6 +118,8 @@ class RecordingConfigTest(unittest.TestCase):
                     config['defaults']['max_bag_duraton'] = 300
                 elif mutation == 'boolean':
                     config['profiles']['sim']['use_sim_time'] = 'false'
+                elif mutation == 'regex':
+                    config['topic_groups']['tracking'].append({'regex': '{ns}/(unclosed'})
                 else:
                     config['profiles']['sim']['groups'] = []
                 path.write_text(yaml.safe_dump(config))

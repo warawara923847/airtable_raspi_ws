@@ -657,7 +657,7 @@ def check_tracking(args, log_dir, domain, config, cameras, label, *extra):
                 require(record['ids'] == ids,
                         f'{namespace}: rendered IDs {sorted(record["ids"])}, expected {ids}')
                 frames = {(f, w, h) for _, f, w, h in record['images']}
-                require(frames == {(frame, 1280, 960)}, f'{namespace}: image frames {frames}')
+                require(frames == {(frame, 848, 480)}, f'{namespace}: image frames {frames}')
                 require({info.header.frame_id for info in record['infos']} == {frame},
                         f'{namespace}: CameraInfo frame')
                 require({msg.header.frame_id for msg in record['measured']} == {table},

@@ -1,0 +1,55 @@
+# robot_localization ekf_node: planar state from the ArUco pose observation only.
+# Started per robot by airtable_bringup (trajectory.launch.py state_source:=estimator), which
+# also sets the frames and use_sim_time / publish_tf:
+#   world_frame = odom_frame = <table_frame>, base_link_frame = <namespace>/base_link,
+#   map_frame = <namespace>/map (unused, must only differ), odometry/filtered -> state/odometry
+# Output: nav_msgs/Odometry, pose in the table frame and twist in base_link, which is what
+# airtable_trajectory_controller_node and the simulator's ground truth use.
+#
+# Adding the IMU later: add imu0 (topic, imu0_config with yaw rate and ax/ay, imu0_differential
+# false, imu0_remove_gravitational_acceleration true) and the base_link -> imu_link TF
+# (hardware.imu_mount of the robot configuration). No code change is needed.
+/**:
+  ros__parameters:
+    frequency: 100.0
+    sensor_timeout: 0.1
+    two_d_mode: true
+    publish_acceleration: false
+    print_diagnostics: true
+    # The camera pose arrives some tens of ms after its image time; keep a short history so
+    # out-of-order measurements are fused at their own time instead of being dropped.
+    smooth_lagged_data: true
+    history_length: 0.5
+    reset_on_time_jump: true
+
+    pose0: measurements/external_pose
+    #              x     y     z      roll   pitch  yaw
+    #              vx    vy    vz     vroll  vpitch vyaw
+    #              ax    ay    az
+    pose0_config: [true,  true,  false, false, false, true,
+                   false, false, false, false, false, false,
+                   false, false, false]
+    pose0_differential: false
+    pose0_relative: false
+    pose0_queue_size: 10
+    # Mahalanobis gate against ArUco outliers (a flipped or mismatched marker).
+    pose0_rejection_threshold: 5.0
+
+    # Process noise per second, state order as pose0_config. Tuned in simulation
+    # (docs/adr/0024); vx/vy/vyaw and ax/ay set how quickly velocity follows the pose.
+    process_noise_covariance: [
+      1.0e-04, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 1.0e-04, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 1.0e-06, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 1.0e-06, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 1.0e-06, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-04, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-03, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-03, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-06, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-06, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-06, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-02, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-02, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-02, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-06]

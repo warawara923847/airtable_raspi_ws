@@ -58,12 +58,20 @@ def register_markers(table_points, camera_points, max_residual):
 
 
 def planar_base_pose(camera_from_table, camera_from_marker, base_from_marker, base_height):
-    """Convert a camera marker observation to (x, y, z, yaw) of the vehicle base."""
-    table_from_base = (
-        np.linalg.inv(camera_from_table) @ camera_from_marker @ np.linalg.inv(base_from_marker)
-    )
-    forward = table_from_base[:2, 0]
+    """
+    Convert a camera marker observation to (x, y, z, yaw) of the vehicle base.
+
+    The vehicle floats flat on the table, so only the marker position and its heading are
+    used: the base is placed from the marker through the mounting offset rotated by yaw
+    alone. Single-marker roll/pitch is noisy; applying it to the 0.15 m tall mount moved the
+    base by millimeters per degree (docs/adr/0024).
+    """
+    table_from_marker = np.linalg.inv(camera_from_table) @ camera_from_marker
+    forward = (table_from_marker[:3, :3] @ base_from_marker[:3, :3].T)[:2, 0]
     if np.linalg.norm(forward) < 1e-8:
         raise ValueError('Vehicle forward axis cannot be perpendicular to the table')
     yaw = float(np.arctan2(forward[1], forward[0]))
-    return (*table_from_base[:2, 3], base_height, yaw)
+    c, s = np.cos(yaw), np.sin(yaw)
+    table_from_base_rotation = np.array([[c, -s, 0.], [s, c, 0.], [0., 0., 1.]])
+    position = table_from_marker[:3, 3] - table_from_base_rotation @ base_from_marker[:3, 3]
+    return (*position[:2], base_height, yaw)

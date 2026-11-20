@@ -82,8 +82,12 @@ def generate_launch_description():
             'enable_color': 'false', 'enable_depth': 'false',
             # Settings of the old airtable_ws full_system.launch.py. Auto exposure washed out
             # one glossy marker, and 640x480 crops the view; this detects all four at 65-90 Hz.
+            # Depth is disabled, but the old launch set both profiles of the stereo module;
+            # keep them equal so the module cannot fall back to its 30 Hz default.
+            'depth_module.depth_profile': LaunchConfiguration('camera_profile'),
             'depth_module.infra_profile': LaunchConfiguration('camera_profile'),
-            'depth_module.emitter_enabled': '0',
+            # Undeclared in rs_launch.py (emitter off), so it goes through a config file.
+            'config_file': str(Path(share) / 'config/realsense_d435.yaml'),
             'depth_module.enable_auto_exposure': 'false',
             'depth_module.exposure': LaunchConfiguration('camera_exposure'),
             'depth_module.gain': LaunchConfiguration('camera_gain'),

@@ -1,0 +1,439 @@
+{
+  "configById": {
+    "Tab!main": {
+      "activeTabIdx": 0,
+      "tabs": [
+        {
+          "title": "軌跡・アクチュエータ",
+          "layout": {
+            "direction": "row",
+            "splitPercentage": 50,
+            "first": "Plot!xy",
+            "second": {
+              "direction": "column",
+              "splitPercentage": 34,
+              "first": "StateTransitions!valves",
+              "second": {
+                "direction": "column",
+                "splitPercentage": 50,
+                "first": "Plot!rw_speed",
+                "second": "Plot!rw_torque"
+              }
+            }
+          }
+        },
+        {
+          "title": "3D・カメラ",
+          "layout": {
+            "direction": "row",
+            "splitPercentage": 60,
+            "first": "3D!top",
+            "second": "Image!aruco"
+          }
+        },
+        {
+          "title": "姿勢・追従誤差",
+          "layout": {
+            "direction": "column",
+            "splitPercentage": 50,
+            "first": "Plot!yaw",
+            "second": {
+              "direction": "row",
+              "splitPercentage": 50,
+              "first": "Plot!error",
+              "second": "Plot!rw_pid"
+            }
+          }
+        }
+      ]
+    },
+    "Plot!xy": {
+      "foxglovePanelTitle": "XY軌跡（table_1）",
+      "paths": [
+        {
+          "value": "/robot_1/trajectory/reference.pose.pose.position.y",
+          "xValuePath": "/robot_1/trajectory/reference.pose.pose.position.x",
+          "enabled": true,
+          "label": "目標 reference",
+          "color": "#7f7f7f",
+          "lineStyle": "dashed",
+          "lineSize": 1.5,
+          "showLine": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/measurements/external_pose.pose.pose.position.y",
+          "xValuePath": "/robot_1/measurements/external_pose.pose.pose.position.x",
+          "enabled": true,
+          "label": "マーカー観測 external_pose",
+          "color": "#1f77b4",
+          "lineSize": 1.0,
+          "showLine": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/sim/ground_truth.pose.pose.position.y",
+          "xValuePath": "/robot_1/sim/ground_truth.pose.pose.position.x",
+          "enabled": true,
+          "label": "真値 ground_truth（simのみ）",
+          "color": "#2ca02c",
+          "lineStyle": "dotted",
+          "lineSize": 1.0,
+          "showLine": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "xAxisVal": "custom",
+      "xAxisLabel": "x [m]",
+      "yAxisLabel": "y [m]",
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "floatingLegendPosition": "top-right",
+      "showPlotValuesInLegend": false,
+      "isSynced": false
+    },
+    "StateTransitions!valves": {
+      "foxglovePanelTitle": "バルブ開閉（パルス指令から）",
+      "paths": [
+        {
+          "value": "/robot_1/actuators/thrusters/valve_state.position[0]",
+          "label": "thruster_1",
+          "enabled": true,
+          "timestampMethod": "headerStamp",
+          "customStates": {
+            "type": "range",
+            "states": [
+              {
+                "operator": ">=",
+                "value": 0.5,
+                "label": "開",
+                "color": "#d62728"
+              }
+            ],
+            "otherwise": {
+              "label": "閉",
+              "color": "#d9d9d9"
+            }
+          }
+        },
+        {
+          "value": "/robot_1/actuators/thrusters/valve_state.position[1]",
+          "label": "thruster_2",
+          "enabled": true,
+          "timestampMethod": "headerStamp",
+          "customStates": {
+            "type": "range",
+            "states": [
+              {
+                "operator": ">=",
+                "value": 0.5,
+                "label": "開",
+                "color": "#d62728"
+              }
+            ],
+            "otherwise": {
+              "label": "閉",
+              "color": "#d9d9d9"
+            }
+          }
+        },
+        {
+          "value": "/robot_1/actuators/thrusters/valve_state.position[2]",
+          "label": "thruster_3",
+          "enabled": true,
+          "timestampMethod": "headerStamp",
+          "customStates": {
+            "type": "range",
+            "states": [
+              {
+                "operator": ">=",
+                "value": 0.5,
+                "label": "開",
+                "color": "#d62728"
+              }
+            ],
+            "otherwise": {
+              "label": "閉",
+              "color": "#d9d9d9"
+            }
+          }
+        },
+        {
+          "value": "/robot_1/actuators/thrusters/valve_state.position[3]",
+          "label": "thruster_4",
+          "enabled": true,
+          "timestampMethod": "headerStamp",
+          "customStates": {
+            "type": "range",
+            "states": [
+              {
+                "operator": ">=",
+                "value": 0.5,
+                "label": "開",
+                "color": "#d62728"
+              }
+            ],
+            "otherwise": {
+              "label": "閉",
+              "color": "#d9d9d9"
+            }
+          }
+        }
+      ],
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "xAxisRange": 20,
+      "showPoints": false
+    },
+    "Plot!rw_speed": {
+      "foxglovePanelTitle": "RW 回転速度・速度指令",
+      "paths": [
+        {
+          "value": "/robot_1/actuators/reaction_wheels/state.angular_velocities[0]",
+          "enabled": true,
+          "label": "角速度 [rad/s]（sim・ARW-3m）",
+          "color": "#1f77b4",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/actuators/reaction_wheels/speed_command.speeds[0]",
+          "enabled": true,
+          "label": "速度指令 [-1,1]（SG90-HV）",
+          "color": "#ff7f0e",
+          "yAxisId": "normalized",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "secondaryAxes": [
+        {
+          "id": "normalized",
+          "label": "正規化速度",
+          "min": -1.05,
+          "max": 1.05
+        }
+      ],
+      "yAxisLabel": "rad/s",
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 20,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "floatingLegendPosition": "top-left"
+    },
+    "Plot!rw_torque": {
+      "foxglovePanelTitle": "RW トルク",
+      "paths": [
+        {
+          "value": "/robot_1/actuators/reaction_wheels/command.torques[0]",
+          "enabled": true,
+          "label": "トルク指令 command",
+          "color": "#ff7f0e",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/actuators/reaction_wheels/state.applied_torques[0]",
+          "enabled": true,
+          "label": "適用トルク applied",
+          "color": "#1f77b4",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "yAxisLabel": "N·m",
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 20,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "floatingLegendPosition": "top-left"
+    },
+    "3D!top": {
+      "foxglovePanelTitle": "上面図（table_1）",
+      "followTf": "table_1",
+      "followMode": "follow-none",
+      "cameraState": {
+        "perspective": false,
+        "phi": 0,
+        "thetaOffset": 0,
+        "distance": 3,
+        "targetOffset": [
+          0.5,
+          1.0,
+          0
+        ]
+      },
+      "scene": {
+        "labelScaleFactor": 0.24,
+        "transforms": {
+          "showLabel": false,
+          "axisSize": 0.08
+        }
+      },
+      "layers": {
+        "grid-table": {
+          "visible": true,
+          "layerId": "foxglove.Grid",
+          "label": "Grid",
+          "instanceId": "grid-table",
+          "size": 2,
+          "divisions": 20,
+          "position": [
+            0.5,
+            1.0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "lineWidth": 1,
+          "color": "#248eff40"
+        }
+      },
+      "topics": {
+        "/robot_1/tracking/layout": {
+          "visible": true
+        },
+        "/robot_1/trajectory/path": {
+          "visible": true
+        },
+        "/robot_1/trajectory/actual_path": {
+          "visible": true
+        },
+        "/robot_1/trajectory/reference": {
+          "visible": true,
+          "showCovariance": false
+        },
+        "/robot_1/measurements/external_pose": {
+          "visible": true,
+          "showCovariance": false,
+          "type": "arrow"
+        },
+        "/robot_1/sim/ground_truth": {
+          "visible": true,
+          "showCovariance": false
+        }
+      }
+    },
+    "Image!aruco": {
+      "foxglovePanelTitle": "機体マーカー検出（ID 50）",
+      "imageMode": {
+        "imageTopic": "/robot_1/tracking/aruco_single_50/result"
+      }
+    },
+    "Plot!yaw": {
+      "foxglovePanelTitle": "yaw [deg]",
+      "paths": [
+        {
+          "value": "/robot_1/measurements/external_pose.pose.pose.orientation.@rpy.yaw.@degrees",
+          "enabled": true,
+          "label": "マーカー観測",
+          "color": "#1f77b4",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/sim/ground_truth.pose.pose.orientation.@rpy.yaw.@degrees",
+          "enabled": true,
+          "label": "真値（simのみ）",
+          "color": "#2ca02c",
+          "lineStyle": "dotted",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/trajectory/reference.pose.pose.orientation.@rpy.yaw.@degrees",
+          "enabled": true,
+          "label": "目標",
+          "color": "#7f7f7f",
+          "lineStyle": "dashed",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 30,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "floatingLegendPosition": "top-left"
+    },
+    "Plot!error": {
+      "foxglovePanelTitle": "追従誤差（目標 − 状態）",
+      "paths": [
+        {
+          "value": "/robot_1/trajectory/error.vector.x",
+          "enabled": true,
+          "label": "x [m]",
+          "color": "#1f77b4",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/trajectory/error.vector.y",
+          "enabled": true,
+          "label": "y [m]",
+          "color": "#ff7f0e",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/trajectory/error.vector.z.@degrees",
+          "enabled": true,
+          "label": "yaw [deg]",
+          "color": "#2ca02c",
+          "yAxisId": "deg",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "secondaryAxes": [
+        {
+          "id": "deg",
+          "label": "deg"
+        }
+      ],
+      "yAxisLabel": "m",
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 30,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "floatingLegendPosition": "top-left"
+    },
+    "Plot!rw_pid": {
+      "foxglovePanelTitle": "RW姿勢PID（SG90-HV）",
+      "paths": [
+        {
+          "value": "/robot_1/rw_attitude/debug.vector.x.@degrees",
+          "enabled": true,
+          "label": "yaw誤差 [deg]",
+          "color": "#1f77b4",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/rw_attitude/debug.vector.z",
+          "enabled": true,
+          "label": "速度指令 [-1,1]",
+          "color": "#ff7f0e",
+          "yAxisId": "normalized",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "secondaryAxes": [
+        {
+          "id": "normalized",
+          "label": "正規化速度",
+          "min": -1.05,
+          "max": 1.05
+        }
+      ],
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 30,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "floatingLegendPosition": "top-left"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1.0
+  },
+  "layout": "Tab!main"
+}

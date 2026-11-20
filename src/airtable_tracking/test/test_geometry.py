@@ -31,6 +31,18 @@ def test_camera_and_mounting_do_not_change_vehicle_pose(camera_rpy, yaw):
     np.testing.assert_allclose(result, [0.4, 1.2, 0.01, yaw], atol=1e-12)
 
 
+@pytest.mark.parametrize('tilt', [(0.03, 0.), (0., -0.03), (0.02, 0.02)])
+def test_marker_tilt_noise_does_not_move_the_base(tilt):
+    """A noisy roll/pitch of the marker must not swing the base through the tall mount."""
+    base_from_marker = pose_matrix([0.0, 0.0, 0.147], [0., 0., 0., 1.])
+    table_from_base = pose_matrix([0.4, 1.2, 0.0], quaternion_from_euler(0., 0., 0.7))
+    tilted = pose_matrix([0., 0., 0.], quaternion_from_euler(*tilt, 0.))
+    table_from_marker = table_from_base @ base_from_marker @ tilted
+    x, y, _, yaw = planar_base_pose(np.eye(4), table_from_marker, base_from_marker, 0.0)
+    np.testing.assert_allclose([x, y], [0.4, 1.2], atol=1e-12)
+    assert yaw == pytest.approx(0.7, abs=1e-3)
+
+
 def test_camera_root_pose_places_optical_frame_from_calibration():
     """Chain table->camera_link->optical frame back to the calibrated optical pose."""
     camera_from_table = pose_matrix([0.3, -0.5, 1.3], quaternion_from_euler(2.9, 0.1, -1.6))

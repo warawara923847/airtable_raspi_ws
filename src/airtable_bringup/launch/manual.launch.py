@@ -6,6 +6,8 @@ Manual operation of one robot from the gamepad (PC side). docs/adr/0019.
 - ros2 launch airtable_bringup manual.launch.py plant:=real tracking:=true
     with hardware.launch.py running on the robot's Raspberry Pi
 - ros2 launch airtable_bringup manual.launch.py robot_config:=<.../dual_robot.yaml> robot:=robot_2
+- ros2 launch airtable_bringup manual.launch.py foxglove:=true record:=true record_label:=trial01
+    live view in Foxglove (ws://127.0.0.1:8765) and an MCAP under recordings/
 
 Thrusters: airtable_controller_node maps the D-pad / rotate buttons to valve pulses.
 Reaction wheel:
@@ -17,8 +19,9 @@ Reaction wheel:
 
 from airtable_bringup.launch_helpers import (
     CONFIG_ARGUMENT, default_robot_config, entry_description, is_true, launch_arguments,
-    PLANT_ARGUMENT, plant_of, real_tracking_include, reject_for_real, rviz_node, select_one,
-    simulation_actions, static_rviz_node)
+    pc_observation_actions, PC_OBSERVATION_ARGUMENTS, PLANT_ARGUMENT, plant_of,
+    real_tracking_include, reject_for_real, rviz_node, select_one, simulation_actions,
+    static_rviz_node)
 from airtable_bringup.robot_config import ConfigError, flatten, load_robot_config
 from launch.actions import LogInfo
 
@@ -32,9 +35,10 @@ ARGUMENTS = [
     ('start_camera', 'true', 'plant:=real with tracking: start the RealSense on this PC'),
     ('rviz', 'false', 'Open RViz (camera view with tracking, otherwise robot overview)'),
     ('viewer', 'true', 'plant:=sim: open the MuJoCo viewer'),
-    ('camera_fps', '30.0', 'plant:=sim: rendered camera rate'),
+    ('camera_fps', '90.0', 'plant:=sim: rendered camera rate (real RealSense: 90)'),
+    *PC_OBSERVATION_ARGUMENTS,
 ]
-SIM_ONLY = {'viewer': 'true', 'camera_fps': '30.0'}
+SIM_ONLY = {'viewer': 'true', 'camera_fps': '90.0'}
 
 
 def setup(context):
@@ -93,6 +97,8 @@ def setup(context):
             actions.append(rviz_node([robot], simulation=plant == 'sim',
                                      fixed_frame=robot['table_frame'], table_xy={},
                                      use_sim_time=plant == 'sim'))
+    actions += pc_observation_actions(args, entry='manual', plant=plant, config=config,
+                                      robots=[robot])
     return actions
 
 

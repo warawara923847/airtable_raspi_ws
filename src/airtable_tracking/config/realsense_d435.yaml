@@ -1,0 +1,6 @@
+# realsense2_camera settings that rs_launch.py does not declare as launch arguments.
+# rs_launch.py drops undeclared arguments silently ("Parameter ... is not supported"), so
+# depth_module.emitter_enabled given as a launch argument never reached the node; values
+# in this file (passed as config_file) do. Profile/exposure/gain stay launch arguments of
+# tracking.launch.py (camera_profile, camera_exposure, camera_gain).
+depth_module.emitter_enabled: 0
