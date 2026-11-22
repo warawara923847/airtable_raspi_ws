@@ -1,11 +1,11 @@
 # One nanoSSOC-D60 observation, expressed in the sensor frame (header.frame_id).
 
-# Reported by the sensor.
+# Reported by the sensor (decimal, as in its specification).
 uint8 ERROR_NONE=0
-uint8 ERROR_NOT_ENOUGH_RADIATION=16
-uint8 ERROR_ONLY_ALBEDO=17
-uint8 ERROR_BOTH_SUN_AND_ALBEDO=18
-uint8 ERROR_OUT_OF_FIELD_OF_VIEW=19
+uint8 ERROR_NOT_ENOUGH_RADIATION=10
+uint8 ERROR_ONLY_ALBEDO=11
+uint8 ERROR_BOTH_SUN_AND_ALBEDO=12
+uint8 ERROR_OUT_OF_FIELD_OF_VIEW=13
 # Detected by the host; the angles and intensity are NaN for these except INVALID_ANGLE.
 uint8 ERROR_TRANSMISSION_FAILED=20
 uint8 ERROR_FRAME_SIZE_MISMATCH=21

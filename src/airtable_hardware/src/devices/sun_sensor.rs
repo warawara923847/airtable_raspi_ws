@@ -54,7 +54,7 @@ impl SunSensorThread {
                     let now = Instant::now();
                     if log.should_log(observation.error_code, now) {
                         eprintln!(
-                            "[hardware] sun sensor status 0x{:02x}: {}",
+                            "[hardware] sun sensor status {}: {}",
                             observation.error_code,
                             describe_error(observation.error_code)
                         );

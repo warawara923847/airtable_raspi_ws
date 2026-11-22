@@ -17,19 +17,25 @@ pub const DEFAULT_ADDRESS: u8 = 0x64;
 const CMD_ANGULAR_POSITION: u8 = 0x04;
 const FRAME_SIZE: usize = 15;
 
-pub const ERROR_NONE: u8 = 0x00;
-pub const ERROR_TRANSMISSION_FAILED: u8 = 0x14;
-pub const ERROR_FRAME_SIZE_MISMATCH: u8 = 0x15;
-pub const ERROR_CHECKSUM_MISMATCH: u8 = 0x16;
-pub const ERROR_INVALID_ANGLE: u8 = 0x17;
+// Sensor codes are decimal in its specification (10..=13); the ESP32 firmware used 0x10..=0x13.
+pub const ERROR_NONE: u8 = 0;
+pub const ERROR_NOT_ENOUGH_RADIATION: u8 = 10;
+pub const ERROR_ONLY_ALBEDO: u8 = 11;
+pub const ERROR_BOTH_SUN_AND_ALBEDO: u8 = 12;
+pub const ERROR_OUT_OF_FIELD_OF_VIEW: u8 = 13;
+// Detected by the host.
+pub const ERROR_TRANSMISSION_FAILED: u8 = 20;
+pub const ERROR_FRAME_SIZE_MISMATCH: u8 = 21;
+pub const ERROR_CHECKSUM_MISMATCH: u8 = 22;
+pub const ERROR_INVALID_ANGLE: u8 = 23;
 
 pub fn describe_error(code: u8) -> &'static str {
     match code {
         ERROR_NONE => "ok",
-        0x10 => "not enough radiation",
-        0x11 => "only albedo",
-        0x12 => "both sun and albedo",
-        0x13 => "out of field of view",
+        ERROR_NOT_ENOUGH_RADIATION => "not enough radiation",
+        ERROR_ONLY_ALBEDO => "only albedo",
+        ERROR_BOTH_SUN_AND_ALBEDO => "both sun and albedo",
+        ERROR_OUT_OF_FIELD_OF_VIEW => "out of field of view",
         ERROR_TRANSMISSION_FAILED => "I2C transfer failed (no ACK or bus error)",
         ERROR_FRAME_SIZE_MISMATCH => "short I2C transfer",
         ERROR_CHECKSUM_MISMATCH => "checksum mismatch",
@@ -248,10 +254,19 @@ mod tests {
 
     #[test]
     fn sensor_error_keeps_the_raw_angles_but_gives_no_direction() {
-        let observation = observe(Ok(encode_frame(61.0, 2.0, 40.0, 0x13)));
-        assert_eq!(observation.error_code, 0x13);
+        let observation = observe(Ok(encode_frame(61.0, 2.0, 40.0, ERROR_OUT_OF_FIELD_OF_VIEW)));
+        assert_eq!(observation.error_code, 13);
         assert_eq!(observation.alpha_deg, 61.0);
         assert_eq!(observation.sun_vector, None);
+    }
+
+    #[test]
+    fn sensor_error_codes_are_decimal() {
+        assert_eq!(describe_error(10), "not enough radiation");
+        assert_eq!(describe_error(11), "only albedo");
+        assert_eq!(describe_error(12), "both sun and albedo");
+        assert_eq!(describe_error(13), "out of field of view");
+        assert_eq!(describe_error(0x10), "unknown sensor error code");
     }
 
     #[test]
