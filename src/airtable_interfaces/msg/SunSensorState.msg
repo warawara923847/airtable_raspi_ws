@@ -14,7 +14,9 @@ uint8 ERROR_INVALID_ANGLE=23
 
 std_msgs/Header header
 
-# True only when error_code is ERROR_NONE and sun_vector holds a direction.
+# True when the angles can be used and sun_vector holds a direction: error_code is NONE,
+# ONLY_ALBEDO or BOTH_SUN_AND_ALBEDO. Read error_code for the quality. False without light
+# (NOT_ENOUGH_RADIATION), out of the field of view, for unknown codes and for host errors.
 bool valid
 uint8 error_code
 

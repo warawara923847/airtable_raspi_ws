@@ -10,7 +10,8 @@ elevation of the direction from the table toward the light.
 
 alpha = atan2(x, z) and beta = atan2(y, z) of the sun in the sensor frame. With the sun
 behind the sensor or too dim the output is what the real sensor gave without light:
-error 10 and alpha = beta = 60 deg.
+error 10 and alpha = beta = 60 deg. Beyond the field of view: error 13 with the raw
+angles. Neither is valid, as on the real sensor.
 """
 
 import collections
@@ -80,12 +81,15 @@ class SunSensorModel:
                                (0.0, 0.0, 0.0))
         x, y, z = self.sun_in_sensor(yaw)
         intensity = self.peak * z
-        if z <= 0 or intensity < self.minimum:
-            return Observation(False, ERROR_NOT_ENOUGH_RADIATION, NO_LIGHT_ANGLE_DEG,
+        no_light = Observation(False, ERROR_NOT_ENOUGH_RADIATION, NO_LIGHT_ANGLE_DEG,
                                NO_LIGHT_ANGLE_DEG, max(intensity, 0.0), (0.0, 0.0, 0.0))
+        if z <= 0 or intensity < self.minimum:
+            return no_light
         alpha = math.degrees(math.atan2(x, z)) + self.bias[0] + self.random.gauss(0, self.noise)
         beta = math.degrees(math.atan2(y, z)) + self.bias[1] + self.random.gauss(0, self.noise)
-        if abs(alpha) > self.fov_deg or abs(beta) > self.fov_deg:
+        if max(abs(alpha), abs(beta)) >= 90:  # noise past grazing: tan() would change sign
+            return no_light
+        if max(abs(alpha), abs(beta)) > self.fov_deg:
             return Observation(False, ERROR_OUT_OF_FIELD_OF_VIEW, alpha, beta, intensity,
                                (0.0, 0.0, 0.0))
         # Same conversion as the real driver.

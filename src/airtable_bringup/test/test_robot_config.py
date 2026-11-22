@@ -120,7 +120,8 @@ class RobotConfigTest(unittest.TestCase):
             self.assertEqual(sensor['params'], PACKAGE / 'config' / 'nanossoc.yaml')
             self.assertEqual(sensor['frame'], 'robot_1/sun_sensor_link')
             # Right side of the robot: sensor +Z toward body -Y, +X toward body +X.
-            self.assertEqual(sensor['mount'], [0.0, -0.1, 0.0, math.pi / 2, 0.0, 0.0])
+            self.assertEqual(sensor['mount'][3:], [math.pi / 2, 0.0, 0.0])
+            self.assertLess(sensor['mount'][1], 0.0)
             self.assertEqual(simulated['params'], PACKAGE / 'config' / 'sun_sensor_sim.yaml')
             self.assertEqual(simulated['mount'], sensor['mount'])
             self.assertEqual(simulated['sun'], {'azimuth_deg': 180.0, 'elevation_deg': 0.0})

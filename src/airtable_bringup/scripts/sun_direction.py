@@ -1,28 +1,28 @@
 #!/usr/bin/python3
 """
-Show the measured sun direction as an arrow from the sun sensor (PC side).
+Show the sun direction given by alpha as an arrow from the sun sensor (PC side).
 
 Subscribes to measurements/sun_sensor (airtable_interfaces/SunSensorState) and publishes
 visualization_msgs/Marker on measurements/sun_direction_marker, in the frame of the
-measurement. RViz and Foxglove place it on the robot through the body -> sensor TF of
-sun_sensor.mount. An invalid measurement removes the arrow, and the marker
-lifetime removes it if the measurements stop.
+measurement. The arrow lies in the sensor's X-Z plane, at alpha from +Z toward +X, and
+ignores beta; with the sensor +Y along body +Z that is the robot's horizontal plane.
+RViz and Foxglove place it on the robot through the body -> sensor TF of sun_sensor.mount.
+An invalid measurement removes the arrow, and the marker lifetime removes it if the
+measurements stop.
 """
 
 import math
 import sys
 
 
-def arrow_end(valid, vector, length):
+def arrow_end(valid, alpha_deg, length):
     """Return the arrow tip in the sensor frame, or None when there is no direction."""
     if not valid or not math.isfinite(length) or length <= 0:
         return None
-    if not all(math.isfinite(value) for value in vector):
+    if not math.isfinite(alpha_deg) or abs(alpha_deg) >= 90:
         return None
-    norm = math.sqrt(sum(value * value for value in vector))
-    if norm < 1e-6:
-        return None
-    return tuple(length * value / norm for value in vector)
+    alpha = math.radians(alpha_deg)
+    return (length * math.sin(alpha), 0.0, length * math.cos(alpha))
 
 
 def main(argv=None):
@@ -54,8 +54,7 @@ def main(argv=None):
             marker.id = 0
             # The Pi's clock stamps the message: draw with the latest TF, not at that time.
             marker.frame_locked = True
-            tip = arrow_end(state.valid, (state.sun_vector.x, state.sun_vector.y,
-                                          state.sun_vector.z), self.length)
+            tip = arrow_end(state.valid, state.alpha_deg, self.length)
             if tip is None:
                 marker.action = Marker.DELETE
             else:

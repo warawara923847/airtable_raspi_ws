@@ -50,4 +50,4 @@ robots:
     sun_sensor:
       # base_link -> sensor [x,y,z,roll,pitch,yaw] (m, rad). On the right side: sensor +Z
       # toward body -Y, +X toward body +X. The position is provisional (body edge).
-      mount: [0.0, -0.1, 0.0, 1.5707963267948966, 0.0, 0.0]
+      mount: [0.0, -0.08, 0.0, 1.5707963267948966, 0.0, 0.0]

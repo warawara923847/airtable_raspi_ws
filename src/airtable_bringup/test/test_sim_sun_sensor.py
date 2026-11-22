@@ -45,12 +45,18 @@ class SunSensorModelTest(unittest.TestCase):
             self.assertAlmostEqual(observation.alpha_deg, -(yaw + 90), places=9)
             self.assertAlmostEqual(math.dist(observation.sun_vector, (0, 0, 0)), 1.0)
 
-    def test_outside_the_field_of_view(self):
+    def test_outside_the_field_of_view_is_not_valid(self):
         observation = model().observe(math.radians(-20))
         self.assertFalse(observation.valid)
         self.assertEqual(observation.error_code, sim.ERROR_OUT_OF_FIELD_OF_VIEW)
         self.assertAlmostEqual(observation.alpha_deg, -70.0)
         self.assertEqual(observation.sun_vector, (0.0, 0.0, 0.0))
+
+    def test_noise_past_grazing_is_not_a_direction(self):
+        observation = model(min_intensity_percent=0.0, bias_deg=(5.0, 0.0)).observe(
+            math.radians(-179))
+        self.assertFalse(observation.valid)
+        self.assertEqual(observation.error_code, sim.ERROR_NOT_ENOUGH_RADIATION)
 
     def test_light_at_or_behind_the_sensor_plane_is_no_radiation(self):
         for yaw in (0, 45, 90, 180):

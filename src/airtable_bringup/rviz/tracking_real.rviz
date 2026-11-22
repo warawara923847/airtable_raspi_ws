@@ -63,6 +63,16 @@ Visualization Manager:
       Head Radius: 0.035
       Covariance:
         Value: false
+    - Class: rviz_default_plugins/Marker
+      Name: Sun Direction from alpha (yellow)
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /robot_1/measurements/sun_direction_marker
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
     - Class: rviz_default_plugins/TF
       Name: Frames
       Enabled: true

@@ -382,6 +382,15 @@ def _measured_pose(topic, color):
     }
 
 
+def _sun_marker(topic):
+    return {
+        'Class': 'rviz_default_plugins/Marker', 'Name': 'Sun direction from alpha (yellow)',
+        'Enabled': True,
+        'Topic': {'Value': topic, 'Reliability Policy': 'Reliable',
+                  'Durability Policy': 'Volatile', 'History Policy': 'Keep Last', 'Depth': 5},
+    }
+
+
 def rviz_config(robots, *, simulation, fixed_frame='world', center=(0.5, 1.0), scale=450):
     """Build an RViz config showing each robot's target, actual path and pose."""
     displays = [{
@@ -405,6 +414,8 @@ def rviz_config(robots, *, simulation, fixed_frame='world', center=(0.5, 1.0), s
             _odometry(f'Actual pose ({state})', state, actual, 0.20),
             _measured_pose(f'{ns}/measurements/external_pose', measured),
         ]
+        if robot['hardware']['sun_sensor'] is not None:
+            group.append(_sun_marker(f'{ns}/measurements/sun_direction_marker'))
         if simulation:
             group.append({
                 'Class': 'rviz_default_plugins/Wrench', 'Name': 'External disturbance',

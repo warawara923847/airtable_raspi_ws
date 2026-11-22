@@ -59,13 +59,18 @@
           "title": "太陽センサ",
           "layout": {
             "direction": "row",
-            "splitPercentage": 60,
+            "splitPercentage": 55,
             "first": "3D!sun",
             "second": {
               "direction": "column",
-              "splitPercentage": 60,
+              "splitPercentage": 50,
               "first": "Plot!sun_angles",
-              "second": "Plot!sun_status"
+              "second": {
+                "direction": "column",
+                "splitPercentage": 55,
+                "first": "Plot!sun_intensity",
+                "second": "StateTransitions!sun_status"
+              }
             }
           }
         }
@@ -520,14 +525,6 @@
           "label": "y [m]",
           "color": "#ff7f0e",
           "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/robot_1/trajectory/error.vector.z.@degrees",
-          "enabled": true,
-          "label": "yaw [deg]",
-          "color": "#2ca02c",
-          "yAxisId": "deg",
-          "timestampMethod": "receiveTime"
         }
       ],
       "isSynced": true,
@@ -539,7 +536,15 @@
     },
     "Plot!error_yaw": {
       "foxglovePanelTitle": "yaw追従誤差 [deg]（目標 − 状態、負→時計回り指令）",
-      "paths": [],
+      "paths": [
+        {
+          "value": "/robot_1/trajectory/error.vector.z.@degrees",
+          "enabled": true,
+          "label": "yaw [deg]",
+          "color": "#2ca02c",
+          "timestampMethod": "receiveTime"
+        }
+      ],
       "isSynced": true,
       "timeWindowMode": "sliding",
       "followingViewWidth": 30,
@@ -548,7 +553,7 @@
       "floatingLegendPosition": "top-left"
     },
     "3D!sun": {
-      "foxglovePanelTitle": "太陽方向（機体固定）",
+      "foxglovePanelTitle": "太陽方向 αの矢印（機体固定）",
       "followTf": "robot_1/base_link",
       "followMode": "follow-pose",
       "cameraState": {
@@ -576,19 +581,19 @@
       }
     },
     "Plot!sun_angles": {
-      "foxglovePanelTitle": "太陽角 [deg]",
+      "foxglovePanelTitle": "太陽角 α・β [deg]（有効な観測のみ）",
       "paths": [
         {
-          "value": "/robot_1/measurements/sun_sensor.alpha_deg",
+          "value": "/robot_1/measurements/sun_sensor{valid==true}.alpha_deg",
           "enabled": true,
-          "label": "alpha",
+          "label": "α",
           "color": "#1f77b4",
           "timestampMethod": "receiveTime"
         },
         {
-          "value": "/robot_1/measurements/sun_sensor.beta_deg",
+          "value": "/robot_1/measurements/sun_sensor{valid==true}.beta_deg",
           "enabled": true,
-          "label": "beta",
+          "label": "β",
           "color": "#ff7f0e",
           "timestampMethod": "receiveTime"
         }
@@ -600,21 +605,14 @@
       "legendDisplay": "floating",
       "floatingLegendPosition": "top-left"
     },
-    "Plot!sun_status": {
-      "foxglovePanelTitle": "受光強度 [%] / エラーコード",
+    "Plot!sun_intensity": {
+      "foxglovePanelTitle": "受光強度 [%]",
       "paths": [
         {
           "value": "/robot_1/measurements/sun_sensor.intensity_percent",
           "enabled": true,
           "label": "強度",
           "color": "#2ca02c",
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/robot_1/measurements/sun_sensor.error_code",
-          "enabled": true,
-          "label": "エラーコード",
-          "color": "#d62728",
           "timestampMethod": "receiveTime"
         }
       ],
@@ -624,6 +622,24 @@
       "showLegend": true,
       "legendDisplay": "floating",
       "floatingLegendPosition": "top-left"
+    },
+    "StateTransitions!sun_status": {
+      "foxglovePanelTitle": "センサ状態（valid / error_code）",
+      "paths": [
+        {
+          "value": "/robot_1/measurements/sun_sensor.valid",
+          "label": "valid",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/measurements/sun_sensor.error_code",
+          "label": "error_code",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": true
     }
   },
   "globalVariables": {},

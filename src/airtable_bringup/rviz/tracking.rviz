@@ -80,6 +80,16 @@ Visualization Manager:
       Reference Frame: sim_camera_infra1_optical_frame
       Length: 0.25
       Radius: 0.012
+    - Class: rviz_default_plugins/Marker
+      Name: Sun Direction from alpha (yellow)
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /robot_1/measurements/sun_direction_marker
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
     - Class: rviz_default_plugins/TF
       Name: Frame Names
       Enabled: true

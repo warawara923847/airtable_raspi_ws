@@ -79,6 +79,15 @@ fn angle_to_vector(alpha_deg: f32, beta_deg: f32) -> Option<[f64; 3]> {
     Some([x / norm, y / norm, 1.0 / norm])
 }
 
+/// Codes whose angles are used. No light and out of the field of view are excluded.
+/// An allow-list: an unknown code can be a corrupted frame.
+fn angles_usable(code: u8) -> bool {
+    matches!(
+        code,
+        ERROR_NONE | ERROR_ONLY_ALBEDO | ERROR_BOTH_SUN_AND_ALBEDO
+    )
+}
+
 fn checksum(bytes: &[u8]) -> u8 {
     bytes.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte))
 }
@@ -98,7 +107,7 @@ fn parse_frame(frame: &[u8; FRAME_SIZE]) -> SunObservation {
         error_code: frame[13],
         sun_vector: None,
     };
-    if observation.error_code == ERROR_NONE {
+    if angles_usable(observation.error_code) {
         observation.sun_vector = angle_to_vector(alpha_deg, beta_deg);
         if observation.sun_vector.is_none() {
             observation.error_code = ERROR_INVALID_ANGLE;
@@ -253,10 +262,34 @@ mod tests {
     }
 
     #[test]
-    fn sensor_error_keeps_the_raw_angles_but_gives_no_direction() {
-        let observation = observe(Ok(encode_frame(61.0, 2.0, 40.0, ERROR_OUT_OF_FIELD_OF_VIEW)));
-        assert_eq!(observation.error_code, 13);
-        assert_eq!(observation.alpha_deg, 61.0);
+    fn codes_with_a_measured_angle_give_a_direction() {
+        for code in [ERROR_ONLY_ALBEDO, ERROR_BOTH_SUN_AND_ALBEDO] {
+            let observation = observe(Ok(encode_frame(41.0, 2.0, 40.0, code)));
+            assert_eq!(observation.error_code, code);
+            assert_eq!(observation.alpha_deg, 41.0);
+            assert!(observation.sun_vector.is_some(), "code {code}");
+        }
+    }
+
+    #[test]
+    fn excluded_and_unknown_codes_keep_raw_angles_but_give_no_direction() {
+        for code in [
+            ERROR_NOT_ENOUGH_RADIATION,
+            ERROR_OUT_OF_FIELD_OF_VIEW,
+            14,
+            0x8a,
+        ] {
+            let observation = observe(Ok(encode_frame(60.0, 60.0, 0.0, code)));
+            assert_eq!(observation.error_code, code);
+            assert_eq!(observation.alpha_deg, 60.0);
+            assert_eq!(observation.sun_vector, None, "code {code}");
+        }
+    }
+
+    #[test]
+    fn usable_code_with_an_impossible_angle_is_rejected() {
+        let observation = observe(Ok(encode_frame(f32::NAN, 0.0, 10.0, ERROR_ONLY_ALBEDO)));
+        assert_eq!(observation.error_code, ERROR_INVALID_ANGLE);
         assert_eq!(observation.sun_vector, None);
     }
 

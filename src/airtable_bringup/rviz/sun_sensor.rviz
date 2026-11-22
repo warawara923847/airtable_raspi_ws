@@ -31,7 +31,7 @@ Visualization Manager:
       Marker Scale: 0.4
       Update Interval: 0
     - Class: rviz_default_plugins/Marker
-      Name: Sun Direction (yellow)
+      Name: Sun Direction from alpha (yellow)
       Enabled: true
       Value: true
       Topic:
