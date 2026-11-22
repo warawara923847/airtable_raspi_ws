@@ -170,7 +170,7 @@ ros2 launch airtable_bringup hardware.launch.py \
 |---|---|---|
 | スラスタバルブ | `thrusters.backend: gpio` | GPIO character device。`thrusters.gpio_lines` は thruster_1〜4 の BCM 番号（既定 19/26/20/21） |
 | RW | `hardware.rw: arw3m`（`config/arw3m.yaml`） | ASPINA ARW-3m（I2C、既定 `/dev/i2c-1` の 0x60）。応答が無ければ起動を拒否 |
-| サンセンサ | `hardware.sun_sensor`（`config/nanossoc.yaml`） | nanoSSOC-D60（I2C、既定 `/dev/i2c-1` の 0x64）。応答が無くても起動し、エラーコードを配信 |
+| サンセンサ | `robots[].sun_sensor`（`config/nanossoc.yaml`） | nanoSSOC-D60（I2C、既定 `/dev/i2c-1` の 0x64、Piの I2C は 10 kHz）。応答が無くても起動し、エラーコードを配信 |
 
 - バルブは常閉として扱い、起動時・パルス終了時・ノード終了時に Low にします。
   パルス長は Pi 側で計時し、`thrusters.max_pulse_ms` を超える指令は短縮します。
@@ -183,8 +183,8 @@ ros2 launch airtable_bringup hardware.launch.py \
   その後の力積・むだ時間・慣性の測定とパラメータ反映は [スラスタ力積の測定](docs/thruster-impulse.md)。
   `scripts/check_valves.py` が `pulse` を1本ずつ送ります。
 - サンセンサの配線・起動・太陽方向の表示は [サンセンサ手順](docs/sun-sensor.md)、設計判断は
-  [0029](docs/adr/0029-nanossoc-sun-sensor.md)。角度は `/robot_1/measurements/sun_sensor` に出ます。
-  実センサでの通信は未確認です。
+  [0029](docs/adr/0029-nanossoc-sun-sensor.md)・[0030](docs/adr/0030-sun-sensor-shared-config-and-sim.md)。
+  角度は実機・simとも `/robot_1/measurements/sun_sensor` に出ます。取り付けと光源は構成ファイルで共通です。
 
 設計判断と検証値は
 [0016. Raspberry Pi 向けビルド分離と実I/O](docs/adr/0016-pi-build-and-real-io.md)。

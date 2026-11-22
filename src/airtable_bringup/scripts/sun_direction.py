@@ -5,7 +5,7 @@ Show the measured sun direction as an arrow from the sun sensor (PC side).
 Subscribes to measurements/sun_sensor (airtable_interfaces/SunSensorState) and publishes
 visualization_msgs/Marker on measurements/sun_direction_marker, in the frame of the
 measurement. RViz and Foxglove place it on the robot through the body -> sensor TF of
-hardware.sun_sensor.mount. An invalid measurement removes the arrow, and the marker
+sun_sensor.mount. An invalid measurement removes the arrow, and the marker
 lifetime removes it if the measurements stop.
 """
 

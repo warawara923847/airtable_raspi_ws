@@ -41,6 +41,8 @@ topic_groups:
     - '{ns}/sim/disturbance/wrench'
     - '{ns}/sim/disturbance/applied'
     - '{ns}/imu_1'
+    - '{ns}/measurements/sun_sensor'  # simulated nanoSSOC-D60 (sim_sun_sensor)
+    - '{ns}/measurements/sun_direction_marker'
   hardware:
     - '{ns}/imu/data_raw'
     - '{ns}/joint_states'

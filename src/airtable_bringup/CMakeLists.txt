@@ -45,6 +45,10 @@ install(PROGRAMS scripts/sun_direction.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME sun_direction
 )
+install(PROGRAMS scripts/sim_sun_sensor.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME sim_sun_sensor
+)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
@@ -53,6 +57,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_robot_config test/test_robot_config.py)
   ament_add_pytest_test(test_valve_state test/test_valve_state.py)
   ament_add_pytest_test(test_sun_direction test/test_sun_direction.py)
+  ament_add_pytest_test(test_sim_sun_sensor test/test_sim_sun_sensor.py)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files

@@ -132,7 +132,48 @@ def simulation_actions(robots, *, model, viewer, camera_fps, tracking, poses,
             'camera_info_topic': camera['camera_info_topic'],
             'marker_size': str(camera['marker_size']),
         }))
+    for robot in robots:
+        actions += sim_sun_sensor_actions(robot)
     return actions
+
+
+def mount_tf(name, robot, child_frame, mount):
+    """Publish the static body -> sensor transform [x, y, z, roll, pitch, yaw]."""
+    from launch_ros.actions import Node
+
+    keys = ['--x', '--y', '--z', '--roll', '--pitch', '--yaw']
+    return Node(
+        package='tf2_ros', executable='static_transform_publisher',
+        name=name, namespace=robot['namespace'], output='log',
+        arguments=[item for pair in zip(keys, map(str, mount)) for item in pair] + [
+            '--frame-id', robot['body_frame'], '--child-frame-id', child_frame])
+
+
+def sim_sun_sensor_actions(robot):
+    """Simulated sun sensor and its mount TF; nothing for a robot without the sensor."""
+    sensor = robot['simulation']['sun_sensor']
+    if sensor is None:
+        return []
+    missing = [name for name, value in (('sun_sensor.mount', sensor['mount']),
+                                        (f'tables.{robot["table_frame"]}.sun', sensor['sun']))
+               if value is None]
+    if missing:
+        raise ConfigError(f'{robot["namespace"]}: the simulated sun sensor needs {missing} '
+                          'in the robot configuration')
+    from launch_ros.actions import Node
+
+    return [
+        mount_tf('sun_sensor_mount_tf', robot, sensor['frame'], sensor['mount']),
+        Node(package='airtable_bringup', executable='sim_sun_sensor',
+             name='airtable_sim_sun_sensor', namespace=robot['namespace'], output='screen',
+             parameters=[str(sensor['params']), {
+                 'use_sim_time': True,
+                 'sun_sensor.frame_id': sensor['frame'],
+                 'sun_sensor.mount': sensor['mount'],
+                 'sun_sensor.azimuth_deg': sensor['sun']['azimuth_deg'],
+                 'sun_sensor.elevation_deg': sensor['sun']['elevation_deg'],
+             }]),
+    ]
 
 
 REAL_TRACKING_REQUIRED = ('params', 'camera_frame', 'image_topic', 'camera_info_topic',
@@ -494,11 +535,13 @@ def record_snapshots(config, robots, *, simulation):
     for robot in robots:
         tracking = robot.get('tracking', {})
         hardware = robot.get('hardware', {})
+        sun_sensor = robot.get('simulation', {}).get('sun_sensor') if simulation \
+            else hardware.get('sun_sensor')
         paths += [robot.get('trajectory_params'), robot.get('thruster_params'),
                   tracking.get('simulation_params' if simulation else 'params'),
                   None if simulation else hardware.get('params'),
                   None if simulation else hardware.get('rw_params'),
-                  None if simulation else (hardware.get('sun_sensor') or {}).get('params')]
+                  (sun_sensor or {}).get('params')]
     return list(dict.fromkeys(str(path) for path in paths if path is not None))
 
 
@@ -582,13 +625,13 @@ def valve_state_node(robot, *, use_sim_time):
                 parameters=[{'use_sim_time': use_sim_time, 'thruster_names': list(names)}])
 
 
-def sun_direction_node(robot):
-    """Arrow marker of the measured sun direction (scripts/sun_direction.py); real robot only."""
+def sun_direction_node(robot, *, use_sim_time):
+    """Arrow marker of the measured sun direction (scripts/sun_direction.py)."""
     from launch_ros.actions import Node
 
     return Node(package='airtable_bringup', executable='sun_direction',
                 name='airtable_sun_direction', namespace=robot['namespace'], output='screen',
-                parameters=[{'use_sim_time': False}])
+                parameters=[{'use_sim_time': use_sim_time}])
 
 
 def pc_observation_actions(args, *, entry, plant, config, robots, snapshots=(), session=None):
@@ -597,9 +640,8 @@ def pc_observation_actions(args, *, entry, plant, config, robots, snapshots=(), 
     if is_true(args['upload']) and not is_true(args['record']):
         raise ConfigError('upload:=true needs record:=true')
     actions = []
-    if not simulation:
-        actions += [sun_direction_node(robot) for robot in robots
-                    if robot['hardware']['sun_sensor'] is not None]
+    actions += [sun_direction_node(robot, use_sim_time=simulation) for robot in robots
+                if robot['hardware']['sun_sensor'] is not None]
     if is_true(args['foxglove']) or is_true(args['record']):
         # Display/recording aid only; nothing subscribes to it for control.
         actions += [valve_state_node(robot, use_sim_time=simulation) for robot in robots]

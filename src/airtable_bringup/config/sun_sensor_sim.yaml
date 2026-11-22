@@ -1,0 +1,21 @@
+# Simulated nanoSSOC-D60 (scripts/sim_sun_sensor.py, docs/sun-sensor.md, docs/adr/0030).
+# The mount and the light direction come from the robot configuration, shared with the
+# real robot: robots[].sun_sensor.mount and tables.<table>.sun.
+/**:
+  ros__parameters:
+    sun_sensor:
+      # Same as period_ms: 100 of config/nanossoc.yaml.
+      rate_hz: 10.0
+      # Time of one read at the 10 kHz I2C clock of the Pi.
+      latency_s: 0.016
+      # Catalog field of view per axis. Beyond it: error 13.
+      fov_deg: 60.0
+      # Starting values; replace them with measurements of the real sensor at rest.
+      noise_stddev_deg: 0.1
+      bias_deg: [0.0, 0.0]
+      # intensity = peak * cos(incidence angle). Below the minimum: error 10.
+      peak_intensity_percent: 100.0
+      min_intensity_percent: 5.0
+      # Probability that one read fails (error 20).
+      dropout_probability: 0.0
+      seed: 42

@@ -1,5 +1,5 @@
 # airtable_hardware: nanoSSOC-D60 sun sensor (docs/sun-sensor.md, docs/adr/0029).
-# Selected by hardware.sun_sensor of the robot configuration, which also sets frame_id.
+# Selected by robots[].sun_sensor of the robot configuration, which also sets frame_id.
 /**:
   ros__parameters:
     sun_sensor:

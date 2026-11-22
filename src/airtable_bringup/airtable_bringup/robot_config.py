@@ -45,11 +45,12 @@ SIM_SENSORS = ('imu_1_accel', 'imu_1_gyro', 'imu_1_orientation')
 
 TOP_KEYS = {'version', 'description', 'simulation', 'tables', 'defaults', 'robots'}
 SIMULATION_KEYS = {'model'}
-TABLE_KEYS = {'world_pose', 'note'}
+TABLE_KEYS = {'world_pose', 'note', 'sun'}
+SUN_KEYS = {'azimuth_deg', 'elevation_deg'}
 DEFAULT_KEYS = {'trajectory_params', 'thruster_params'}
 ROBOT_KEYS = {'namespace', 'table_frame', 'trajectory_params', 'thruster_params',
               'trajectory_overrides', 'thruster_overrides', 'state_topic',
-              'simulation', 'tracking', 'hardware'}
+              'simulation', 'tracking', 'hardware', 'sun_sensor'}
 ROBOT_SIM_KEYS = {'element_prefix', 'initial_pose', 'state_topic'}
 TRACKING_KEYS = {'params', 'simulation_params', 'simulation_camera', 'camera_frame',
                  'image_topic', 'camera_info_topic', 'marker_size', 'camera_serial_no'}
@@ -57,9 +58,10 @@ TRACKING_KEYS = {'params', 'simulation_params', 'simulation_camera', 'camera_fra
 LEGACY_SIM_CAMERA = 'tracking_camera'
 # Black edge of the ArUco cards in the MJCF models (markers/card.obj).
 SIM_MARKER_SIZE = 0.1
-HARDWARE_KEYS = {'params', 'imu_frame', 'imu_mount', 'rw', 'rw_params', 'sun_sensor'}
-SUN_SENSOR_KEYS = {'params', 'frame', 'mount'}
+HARDWARE_KEYS = {'params', 'imu_frame', 'imu_mount', 'rw', 'rw_params'}
+SUN_SENSOR_KEYS = {'hardware_params', 'simulation_params', 'frame', 'mount'}
 SUN_SENSOR_DEFAULT_PARAMS = 'package://airtable_bringup/config/nanossoc.yaml'
+SUN_SENSOR_SIM_PARAMS = 'package://airtable_bringup/config/sun_sensor_sim.yaml'
 # Reaction wheel fitted to the real robot. It selects both the Pi's airtable_hardware
 # parameters (rw_params, layered over params) and the PC's manual RW control:
 #   none   - no wheel
@@ -196,25 +198,50 @@ def _check_overrides(overrides, base, where):
                               f'{type(known[name]).__name__} in the referenced file')
 
 
-def _sun_sensor(spec, namespace, where, resolve):
-    """Resolve ``hardware.sun_sensor``; absent or null means no sensor on this robot."""
+def _sun_source(spec, where):
+    """Resolve ``tables.<table>.sun``: the direction from the table toward a parallel light."""
     if spec is None:
         return None
-    where = f'{where}.hardware.sun_sensor'
+    spec = _mapping(spec, where, SUN_KEYS, SUN_KEYS)
+    azimuth, elevation = _finite_list([spec['azimuth_deg'], spec['elevation_deg']], 2, where)
+    if abs(elevation) > 90:
+        raise ConfigError(f'{where}.elevation_deg must be within +-90, got {elevation}')
+    return {'azimuth_deg': azimuth, 'elevation_deg': elevation}
+
+
+def _sun_sensor(spec, namespace, where, resolve):
+    """Resolve the real-robot part of ``sun_sensor``; absent or null means no sensor."""
+    if spec is None:
+        return None
+    where = f'{where}.sun_sensor'
     spec = _mapping(spec, where, SUN_SENSOR_KEYS)
     frame = spec.get('frame', f'{namespace}/sun_sensor_link')
     if not isinstance(frame, str) or not frame:
         raise ConfigError(f'{where}.frame must be a non-empty string')
     mount = spec.get('mount')
     return {
-        'params': resolve(spec.get('params') or SUN_SENSOR_DEFAULT_PARAMS, f'{where}.params'),
+        'params': resolve(spec.get('hardware_params') or SUN_SENSOR_DEFAULT_PARAMS,
+                          f'{where}.hardware_params'),
         'frame': frame,
         'mount': None if mount is None else _finite_list(mount, 6, f'{where}.mount'),
     }
 
 
-def _hardware(hardware, namespace, where, resolve):
-    """Resolve one robot's ``hardware`` section."""
+def _simulated_sun_sensor(spec, sensor, sun, where, resolve):
+    """Add the simulator's parameters and the table's light to the resolved sensor."""
+    if sensor is None:
+        return None
+    return {
+        'params': resolve(spec.get('simulation_params') or SUN_SENSOR_SIM_PARAMS,
+                          f'{where}.sun_sensor.simulation_params'),
+        'frame': sensor['frame'],
+        'mount': sensor['mount'],
+        'sun': sun,
+    }
+
+
+def _hardware(hardware, namespace, where, resolve, sun_sensor=None):
+    """Resolve one robot's ``hardware`` section and the real-robot part of its sun sensor."""
     imu_mount = hardware.get('imu_mount')
     imu_frame = hardware.get('imu_frame', f'{namespace}/imu_link')
     if not isinstance(imu_frame, str) or not imu_frame:
@@ -236,7 +263,7 @@ def _hardware(hardware, namespace, where, resolve):
         'rw': rw,
         'rw_params': None if rw_params is None else resolve(
             rw_params, f'{where}.hardware.rw_params'),
-        'sun_sensor': _sun_sensor(hardware.get('sun_sensor'), namespace, where, resolve),
+        'sun_sensor': _sun_sensor(sun_sensor, namespace, where, resolve),
     }
 
 
@@ -284,6 +311,7 @@ def load_robot_config(path, share=package_share, hardware_only=False):
         tables[table] = {
             'world_pose': None if pose is None else _finite_list(
                 pose, 3, f'tables.{table}.world_pose'),
+            'sun': _sun_source(spec.get('sun'), f'tables.{table}.sun'),
         }
     defaults = _mapping(raw.get('defaults'), 'defaults', DEFAULT_KEYS)
     robots_raw = raw['robots']
@@ -311,7 +339,8 @@ def load_robot_config(path, share=package_share, hardware_only=False):
                 'table_frame': table,
                 'body_frame': f'{namespace}/base_link',
                 'hardware': _hardware(_mapping(entry.get('hardware'), f'{where}.hardware',
-                                               HARDWARE_KEYS), namespace, where, resolve),
+                                               HARDWARE_KEYS), namespace, where, resolve,
+                                      entry.get('sun_sensor')),
             })
             continue
         trajectory_path = resolve(entry.get('trajectory_params') or defaults.get(
@@ -340,7 +369,8 @@ def load_robot_config(path, share=package_share, hardware_only=False):
         seen_prefixes[prefix] = namespace
         initial = sim.get('initial_pose')
         tracking = _mapping(entry.get('tracking'), f'{where}.tracking', TRACKING_KEYS)
-        hardware = _mapping(entry.get('hardware'), f'{where}.hardware', HARDWARE_KEYS)
+        hardware = _hardware(_mapping(entry.get('hardware'), f'{where}.hardware', HARDWARE_KEYS),
+                             namespace, where, resolve, entry.get('sun_sensor'))
         tracking_resolved = {
             key: tracking.get(key) for key in TRACKING_KEYS - {
                 'params', 'simulation_params', 'simulation_camera'}}
@@ -383,9 +413,12 @@ def load_robot_config(path, share=package_share, hardware_only=False):
                     initial, 3, f'{where}.simulation.initial_pose'),
                 'state_topic': _topic(sim.get('state_topic', 'sim/ground_truth'),
                                       f'{where}.simulation.state_topic'),
+                'sun_sensor': _simulated_sun_sensor(
+                    entry.get('sun_sensor'), hardware['sun_sensor'],
+                    tables.get(table, {}).get('sun'), where, resolve),
             },
             'tracking': tracking_resolved,
-            'hardware': _hardware(hardware, namespace, where, resolve),
+            'hardware': hardware,
         })
     if hardware_only:
         return {'path': path, 'model': None, 'tables': tables, 'robots': robots}

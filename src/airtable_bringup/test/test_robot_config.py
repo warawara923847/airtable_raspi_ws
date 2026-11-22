@@ -13,7 +13,7 @@ SRC = PACKAGE.parent
 sys.path.insert(0, str(PACKAGE))
 
 from airtable_bringup import robot_config as rc  # noqa: E402
-from airtable_bringup.launch_helpers import rviz_config  # noqa: E402
+from airtable_bringup.launch_helpers import rviz_config, sim_sun_sensor_actions  # noqa: E402
 
 
 def share(package):
@@ -113,23 +113,42 @@ class RobotConfigTest(unittest.TestCase):
                 rc.load_robot_config(self.write(self.dual_text(extra)), share)
 
     def test_sun_sensor_section(self):
-        """hardware.sun_sensor is optional; defaults are per robot; typos are rejected."""
-        single = self.load('single_robot.yaml')['robots'][0]['hardware']['sun_sensor']
-        self.assertEqual(single['params'], PACKAGE / 'config' / 'nanossoc.yaml')
-        self.assertEqual(single['frame'], 'robot_1/sun_sensor_link')
-        self.assertEqual(len(single['mount']), 6)
+        """sun_sensor is optional and shared by hardware and sim; typos are rejected."""
+        for name in ('single_robot.yaml', 'single_robot_thrusters.yaml'):
+            robot = self.load(name)['robots'][0]
+            sensor, simulated = robot['hardware']['sun_sensor'], robot['simulation']['sun_sensor']
+            self.assertEqual(sensor['params'], PACKAGE / 'config' / 'nanossoc.yaml')
+            self.assertEqual(sensor['frame'], 'robot_1/sun_sensor_link')
+            # Right side of the robot: sensor +Z toward body -Y, +X toward body +X.
+            self.assertEqual(sensor['mount'], [0.0, -0.1, 0.0, math.pi / 2, 0.0, 0.0])
+            self.assertEqual(simulated['params'], PACKAGE / 'config' / 'sun_sensor_sim.yaml')
+            self.assertEqual(simulated['mount'], sensor['mount'])
+            self.assertEqual(simulated['sun'], {'azimuth_deg': 180.0, 'elevation_deg': 0.0})
         for robot in self.load('dual_robot.yaml')['robots']:
             self.assertIsNone(robot['hardware']['sun_sensor'])
+            self.assertIsNone(robot['simulation']['sun_sensor'])
+            self.assertEqual(sim_sun_sensor_actions(robot), [])
         default = rc.load_robot_config(self.write(self.dual_text(
-            '    hardware: {sun_sensor: {}}')), share)['robots'][1]['hardware']['sun_sensor']
-        self.assertEqual(default, {'params': PACKAGE / 'config' / 'nanossoc.yaml',
-                                   'frame': 'robot_2/sun_sensor_link', 'mount': None})
+            '    sun_sensor: {}')), share)['robots'][1]
+        self.assertEqual(default['hardware']['sun_sensor'], {
+            'params': PACKAGE / 'config' / 'nanossoc.yaml',
+            'frame': 'robot_2/sun_sensor_link', 'mount': None})
+        with self.assertRaisesRegex(rc.ConfigError, 'needs .*sun_sensor.mount.*table_2.sun'):
+            sim_sun_sensor_actions(default)
         for extra, fragment in [
-                ('    hardware: {sun_sensor: {mount: [0, 0]}}', 'mount must be a list of 6'),
-                ('    hardware: {sun_sensor: {frame: ""}}', 'frame must be a non-empty'),
-                ('    hardware: {sun_sensor: {bus: 1}}', 'unknown keys')]:
+                ('    sun_sensor: {mount: [0, 0]}', 'mount must be a list of 6'),
+                ('    sun_sensor: {frame: ""}', 'frame must be a non-empty'),
+                ('    sun_sensor: {bus: 1}', 'unknown keys'),
+                ('    hardware: {sun_sensor: {}}', 'unknown keys')]:
             with self.assertRaisesRegex(rc.ConfigError, fragment):
                 rc.load_robot_config(self.write(self.dual_text(extra)), share)
+        for sun, fragment in [('{azimuth_deg: 0, elevation_deg: 91}', 'elevation_deg'),
+                              ('{azimuth_deg: 0}', 'missing required keys'),
+                              ('{azimuth_deg: 0, elevation_deg: 0, x: 1}', 'unknown keys')]:
+            with self.assertRaisesRegex(rc.ConfigError, fragment):
+                rc.load_robot_config(self.write(self.dual_text().replace(
+                    'table_1: {world_pose: null}',
+                    f'table_1: {{world_pose: null, sun: {sun}}}')), share)
 
     def write(self, text, name='robots.yaml'):
         path = self.dir / name
