@@ -20,8 +20,8 @@ Reaction wheel:
 from airtable_bringup.launch_helpers import (
     CONFIG_ARGUMENT, default_robot_config, entry_description, is_true, launch_arguments,
     pc_observation_actions, PC_OBSERVATION_ARGUMENTS, PLANT_ARGUMENT, plant_of,
-    real_tracking_include, reject_for_real, rviz_node, select_one, simulation_actions,
-    static_rviz_node)
+    real_tracking_include, reject_for_real, rviz_node, select_one, SIM_CLOCK_ARGUMENT,
+    simulation_actions, static_rviz_node)
 from airtable_bringup.robot_config import ConfigError, flatten, load_robot_config
 from launch.actions import LogInfo
 
@@ -36,9 +36,10 @@ ARGUMENTS = [
     ('rviz', 'false', 'Open RViz (camera view with tracking, otherwise robot overview)'),
     ('viewer', 'true', 'plant:=sim: open the MuJoCo viewer'),
     ('camera_fps', '90.0', 'plant:=sim: rendered camera rate (real RealSense: 90)'),
+    SIM_CLOCK_ARGUMENT,
     *PC_OBSERVATION_ARGUMENTS,
 ]
-SIM_ONLY = {'viewer': 'true', 'camera_fps': '90.0'}
+SIM_ONLY = {'viewer': 'true', 'camera_fps': '90.0', 'sim_clock_origin': 'wall'}
 
 
 def setup(context):
@@ -78,7 +79,8 @@ def setup(context):
         actions += simulation_actions(
             [robot], model=str(config['model']), viewer=is_true(args['viewer']),
             camera_fps=args['camera_fps'], tracking=tracking,
-            poses=[] if pose is None else [(namespace, pose)])
+            poses=[] if pose is None else [(namespace, pose)],
+            clock_origin=args['sim_clock_origin'])
     else:
         if robot['hardware']['rw'] == 'sg90hv':
             actions.append(Node(

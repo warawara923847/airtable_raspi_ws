@@ -115,8 +115,8 @@
                 <!-- Thruster 1 -->
                 <body
                     name="thruster_1_mount"
-                    pos="0.09 0.09 0.018"
-                    euler="0 0 135"
+                    pos="0.05 0.09 0.018"
+                    euler="0 0 -135"
                 >
                     <site
                         name="thruster_1"
@@ -136,8 +136,8 @@
 
                 <body
                     name="thruster_2_mount"
-                    pos="0.09 -0.09 0.018"
-                    euler="0 0 -135"
+                    pos="-0.05 0.09 0.018"
+                    euler="0 0 -45"
                 >
                     <site
                         name="thruster_2"
@@ -157,8 +157,8 @@
 
                 <body
                     name="thruster_3_mount"
-                    pos="-0.09 -0.09 0.018"
-                    euler="0 0 -45"
+                    pos="0.05 -0.09 0.018"
+                    euler="0 0 135"
                 >
                     <site
                         name="thruster_3"
@@ -178,7 +178,7 @@
 
                 <body
                     name="thruster_4_mount"
-                    pos="-0.09 0.09 0.018"
+                    pos="-0.05 -0.09 0.018"
                     euler="0 0 45"
                 >
 

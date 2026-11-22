@@ -507,12 +507,12 @@ def check_dual(args, log_dir, domain):
                 ThrusterPulseCommand, '/robot_1/actuators/thrusters/pulse', 10)
             session.spin_until(lambda: pub.get_subscription_count() >= 1, procs,
                                what='pulse subscriber')
-            pub.publish(ThrusterPulseCommand(names=['thruster_3', 'thruster_4'],
+            pub.publish(ThrusterPulseCommand(names=['thruster_2', 'thruster_4'],
                                              pulse_duration=Duration(nanosec=200_000_000)))
             session.spin_for(0.4, procs)
             after = {n: table_velocity(session.data[n]['truth'][-1]) for n in names}
             change = {n: (after[n] - before[n]).tolist() for n in names}
-            # thruster_3+4 push +X with 2 * 0.5 N * cos45 for 0.2 s on a 1 kg body.
+            # thruster_2+4 push +X with 2 * 0.5 N * cos45 for 0.2 s on a 1 kg body.
             require(abs(change['robot_1'][0] - 0.2 * math.sqrt(2) * 0.5) < 0.01,
                     f'robot_1 did not respond to its command: {change}')
             require(np.allclose(change['robot_2'], 0, atol=1e-9),

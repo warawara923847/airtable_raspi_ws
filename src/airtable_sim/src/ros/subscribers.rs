@@ -2,12 +2,14 @@ use airtable_interfaces::msg::ReactionWheelCommand;
 use airtable_interfaces::msg::ThrusterPulseCommand;
 use geometry_msgs::msg::WrenchStamped;
 
+use crate::ros::conversions::SimClock;
 use crate::simulation::Simulation;
 
 pub fn create_disturbance_subscription(
     worker: &rclrs::Worker<Simulation>,
     vehicle: String,
     timeout: f64,
+    clock: SimClock,
 ) -> Result<rclrs::WorkerSubscription<WrenchStamped, Simulation>, rclrs::RclrsError> {
     let topic = format!("/{vehicle}/sim/disturbance/wrench");
     worker.create_subscription(
@@ -28,7 +30,8 @@ pub fn create_disturbance_subscription(
             let stamp = if msg.header.stamp.sec == 0 && msg.header.stamp.nanosec == 0 {
                 None
             } else {
-                Some(msg.header.stamp.sec as f64 + msg.header.stamp.nanosec as f64 * 1e-9)
+                // The disturbance watchdog runs on MuJoCo time.
+                Some(clock.to_sim(&msg.header.stamp))
             };
             if let Err(error) = sim.set_disturbance(
                 &vehicle,

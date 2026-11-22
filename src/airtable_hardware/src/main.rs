@@ -16,6 +16,7 @@ use rclrs::{
 };
 
 use devices::imu::DummyImu;
+use devices::sun_sensor::SunSensorThread;
 use sensor_msgs::msg::Imu;
 use sensor_msgs::msg::JointState;
 
@@ -130,6 +131,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("[ros] Failed to publish IMU: {}", error);
             }
         })?;
+
+    let sun_parameters = ros::parameters::SunSensorParameters::declare(&node)?;
+    let _sun_sensor = match sun_parameters.create_driver()? {
+        Some(driver) => {
+            let publisher = node
+                .create_publisher::<airtable_interfaces::msg::SunSensorState>(
+                    "measurements/sun_sensor",
+                )?;
+            let frame_id = sun_parameters.frame_id()?;
+            let clock = node.get_clock();
+            Some(
+                SunSensorThread::spawn(driver, sun_parameters.period()?, move |observation| {
+                    let msg =
+                        ros::publishers::sun_observation_to_msg(observation, clock.now(), &frame_id);
+                    if let Err(error) = publisher.publish(msg) {
+                        eprintln!("[ros] sun sensor publish failed: {error}");
+                    }
+                })
+                .map_err(std::io::Error::other)?,
+            )
+        }
+        None => None,
+    };
 
     let joint_state_publisher = node.create_publisher::<JointState>("joint_states")?;
 

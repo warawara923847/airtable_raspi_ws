@@ -1,0 +1,13 @@
+# airtable_hardware: nanoSSOC-D60 sun sensor (docs/sun-sensor.md, docs/adr/0029).
+# Selected by hardware.sun_sensor of the robot configuration, which also sets frame_id.
+/**:
+  ros__parameters:
+    sun_sensor:
+      enabled: true
+      # i2c: the real sensor. dummy: config/nanossoc_dummy.yaml.
+      backend: i2c
+      # Header pins 3 (SDA, GPIO2) and 5 (SCL, GPIO3). May be shared with the ARW-3m (0x60).
+      i2c_bus: /dev/i2c-1
+      # The address used by the ESP32 firmware.
+      i2c_address: 0x64
+      period_ms: 100

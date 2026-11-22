@@ -20,7 +20,9 @@ name = "airtable_interfaces"
 version = "0.0.0"
 dependencies = [
  "builtin_interfaces",
+ "geometry_msgs",
  "rosidl_runtime_rs",
+ "std_msgs",
 ]
 
 [[package]]
@@ -912,8 +914,20 @@ name = "airtable_sim"
 version = "0.1.0"
 
 [[patch.unused]]
+name = "aruco_msgs"
+version = "5.0.6"
+
+[[patch.unused]]
 name = "composition_interfaces"
 version = "2.0.4"
+
+[[patch.unused]]
+name = "control_msgs"
+version = "5.11.0"
+
+[[patch.unused]]
+name = "controller_manager_msgs"
+version = "4.50.0"
 
 [[patch.unused]]
 name = "diagnostic_msgs"
@@ -922,6 +936,10 @@ version = "5.3.8"
 [[patch.unused]]
 name = "example_interfaces"
 version = "0.12.1"
+
+[[patch.unused]]
+name = "geographic_msgs"
+version = "1.0.6"
 
 [[patch.unused]]
 name = "gps_msgs"
@@ -944,8 +962,24 @@ name = "marine_acoustic_msgs"
 version = "2.1.0"
 
 [[patch.unused]]
+name = "moveit_msgs"
+version = "2.6.0"
+
+[[patch.unused]]
 name = "nav_msgs"
 version = "5.3.8"
+
+[[patch.unused]]
+name = "object_recognition_msgs"
+version = "2.0.0"
+
+[[patch.unused]]
+name = "octomap_msgs"
+version = "2.0.1"
+
+[[patch.unused]]
+name = "pal_statistics_msgs"
+version = "2.8.2"
 
 [[patch.unused]]
 name = "pcl_msgs"
@@ -960,12 +994,20 @@ name = "rcl_interfaces"
 version = "2.0.4"
 
 [[patch.unused]]
+name = "realsense2_camera_msgs"
+version = "4.59.1"
+
+[[patch.unused]]
 name = "rmw_dds_common"
 version = "3.1.1"
 
 [[patch.unused]]
+name = "robot_localization"
+version = "3.8.4"
+
+[[patch.unused]]
 name = "ros_gz_interfaces"
-version = "1.0.24"
+version = "1.0.25"
 
 [[patch.unused]]
 name = "rosbag2_interfaces"

@@ -1,0 +1,9 @@
+# Simulated sun for checking the topic and display without the sensor:
+#   ros2 launch airtable_bringup hardware.launch.py \
+#     sun_sensor_params:=package://airtable_bringup/config/nanossoc_dummy.yaml
+/**:
+  ros__parameters:
+    sun_sensor:
+      enabled: true
+      backend: dummy
+      period_ms: 100

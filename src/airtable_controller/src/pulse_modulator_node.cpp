@@ -1,8 +1,10 @@
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <memory>
 #include <set>
 #include <stdexcept>
+#include <string>
 
 #include <airtable_interfaces/msg/thruster_pulse_command.hpp>
 #include <airtable_interfaces/msg/thruster_setpoint.hpp>
@@ -24,6 +26,21 @@ public:
     {
       throw std::invalid_argument("Thruster names must be nonempty and unique");
     }
+    // Pulse width, and the tick at which each channel may start one pulse. A period longer
+    // than the width leaves the valve closed in between (slow valves), limiting the duty
+    // to width/period: the average thrust of a channel is at most on_thrust * width/period.
+    quantum_ = declare_parameter<double>("pulse_duration_s", 0.01);
+    period_ = declare_parameter<double>("pulse_period_s", quantum_);
+    timeout_ = declare_parameter<double>("command_timeout_s", 0.25);
+    if (!std::isfinite(quantum_) || quantum_ < 0.002 || quantum_ > 0.5 ||
+      !std::isfinite(period_) || period_ < quantum_ - 1e-12 || period_ > 1.0 ||
+      !std::isfinite(timeout_) || timeout_ < period_)
+    {
+      throw std::invalid_argument(
+              "Require pulse in [0.002, 0.5] s, pulse <= period <= 1 s, timeout >= period");
+    }
+    const double duty = std::min(1.0, quantum_ / period_);
+    std::vector<double> full_scale;
     for (const auto & name : names_) {
       if (name.empty()) {
         throw std::invalid_argument("Empty thruster name");
@@ -37,17 +54,17 @@ public:
       {
         throw std::invalid_argument("Require 0 < max_thrust_n <= on_thrust_n");
       }
+      if (maximum > on_thrust * duty + 1e-9) {
+        throw std::invalid_argument(
+                name + ".max_thrust_n exceeds on_thrust_n * pulse_duration_s / pulse_period_s (" +
+                std::to_string(on_thrust * duty) + " N); lower it so the allocator stays feasible");
+      }
       maxima_.push_back(maximum);
       on_thrust_.push_back(on_thrust);
+      // One pulse per period delivers on_thrust * width; express it as an average thrust.
+      full_scale.push_back(on_thrust * duty);
     }
-    quantum_ = declare_parameter<double>("pulse_duration_s", 0.01);
-    timeout_ = declare_parameter<double>("command_timeout_s", 0.25);
-    if (!std::isfinite(quantum_) || quantum_ < 0.002 || quantum_ > 0.5 ||
-      !std::isfinite(timeout_) || timeout_ < quantum_)
-    {
-      throw std::invalid_argument("Require pulse in [0.002, 0.5] s and timeout >= pulse");
-    }
-    modulator_ = std::make_unique<airtable_controller::PulseDensityModulator>(on_thrust_);
+    modulator_ = std::make_unique<airtable_controller::PulseDensityModulator>(full_scale);
     thrust_.resize(names_.size(), 0.0);
     pulse_pub_ = create_publisher<airtable_interfaces::msg::ThrusterPulseCommand>(
             "actuators/thrusters/pulse", 1);
@@ -57,7 +74,9 @@ public:
         receive(*msg);
             });
     timer_ = rclcpp::create_timer(this, get_clock(),
-            rclcpp::Duration::from_seconds(quantum_), [this]() {update();});
+            rclcpp::Duration::from_seconds(period_), [this]() {update();});
+    RCLCPP_INFO(get_logger(), "%.0f ms pulses, at most one per %.0f ms per thruster",
+            quantum_ * 1e3, period_ * 1e3);
   }
 
 private:
@@ -112,9 +131,9 @@ private:
     const double elapsed = time - last_tick_;
     if (last_tick_ >= 0.0 && elapsed < 0.0) {
       clear();
-    } else if (last_tick_ >= 0.0 && elapsed < quantum_ * 0.5) {
+    } else if (last_tick_ >= 0.0 && elapsed < period_ * 0.5) {
       return;
-    } else if (last_tick_ >= 0.0 && elapsed > 3.0 * quantum_) {
+    } else if (last_tick_ >= 0.0 && elapsed > 3.0 * period_) {
       modulator_->reset();        // Never replay a backlog of pulses after a scheduling gap.
     }
     last_tick_ = time;
@@ -142,7 +161,7 @@ private:
   std::vector<std::string> names_;
   std::vector<double> on_thrust_, maxima_, thrust_;
   std::unique_ptr<airtable_controller::PulseDensityModulator> modulator_;
-  double quantum_{0.01}, timeout_{0.25}, command_stamp_{0.0}, last_tick_{-1.0};
+  double quantum_{0.01}, period_{0.01}, timeout_{0.25}, command_stamp_{0.0}, last_tick_{-1.0};
   bool have_command_{false};
   std::chrono::steady_clock::time_point received_;
   rclcpp::Subscription<airtable_interfaces::msg::ThrusterSetpoint>::SharedPtr subscription_;

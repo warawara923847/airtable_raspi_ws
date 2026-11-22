@@ -42,3 +42,8 @@ robots:
       # Default keeps the legacy single-robot frame.
       imu_frame: imu_link
       imu_mount: null  # base_link -> IMU [x,y,z,roll,pitch,yaw]; not measured
+      # nanoSSOC-D60 (docs/sun-sensor.md). Remove this block if the sensor is not fitted.
+      sun_sensor:
+        # base_link -> sensor [x,y,z,roll,pitch,yaw] (m, rad). PROVISIONAL, not measured:
+        # sensor +Z straight up. The displayed direction is only right once this is measured.
+        mount: [0.0, 0.0, 0.1, 0.0, 0.0, 0.0]

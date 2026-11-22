@@ -1,0 +1,61 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Enabled: true
+  Global Options:
+    Background Color: 35; 35; 40
+    Fixed Frame: robot_1/base_link
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Body Grid (0.1 m)
+      Enabled: true
+      Value: true
+      Cell Size: 0.1
+      Plane Cell Count: 10
+      Plane: XY
+      Color: 130; 130; 140
+      Alpha: 0.4
+      Reference Frame: <Fixed Frame>
+    - Class: rviz_default_plugins/TF
+      Name: Frames
+      Enabled: true
+      Value: true
+      Show Names: true
+      Show Axes: true
+      Show Arrows: false
+      Marker Scale: 0.4
+      Update Interval: 0
+    - Class: rviz_default_plugins/Marker
+      Name: Sun Direction (yellow)
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /robot_1/measurements/sun_direction_marker
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Measure
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 1.4
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0.1
+      Pitch: 0.6
+      Yaw: 3.6
+      Target Frame: <Fixed Frame>
+Window Geometry:
+  Width: 1100
+  Height: 800

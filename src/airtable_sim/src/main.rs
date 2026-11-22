@@ -18,7 +18,7 @@ use rosgraph_msgs::msg::Clock;
 use tf2_msgs::msg::TFMessage;
 
 use crate::camera::{CameraSensor, CameraSnapshot, CameraSpec};
-use crate::ros::conversions::sim_time_to_ros_time;
+use crate::ros::conversions::SimClock;
 use crate::ros::publishers::VehicleRosHandles;
 use crate::ros::subscribers::{
     create_disturbance_subscription, create_reaction_wheel_subscription,
@@ -104,6 +104,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !disturbance_timeout.is_finite() || disturbance_timeout <= 0.0 {
         return Err("disturbance_timeout_s must be finite and positive".into());
     }
+    // wall: /clock and stamps start at the current date, so recordings of different runs do
+    // not overlap. zero: ROS time equals MuJoCo time. MuJoCo itself always starts at 0.
+    let clock_origin_param = node
+        .declare_parameter::<Arc<str>>("clock_origin")
+        .default("wall".into())
+        .read_only()?;
+    let sim_clock =
+        SimClock::from_origin(clock_origin_param.get().as_ref()).map_err(std::io::Error::other)?;
     let model_path = model_param.get();
     let enable_camera = camera_param.get();
     let camera_names = camera_names_param.get();
@@ -202,7 +210,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!(
         "[sim] model={model_path}, camera={enable_camera}, vehicles={vehicle_configs:?}, \
-         initial_poses={initial_poses:?}"
+         initial_poses={initial_poses:?}, clock_origin={}",
+        clock_origin_param.get()
     );
     if enable_camera {
         println!("[sim] cameras={camera_specs:?}");
@@ -213,6 +222,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &model_path,
             &camera_specs,
             fps_param.get(),
+            sim_clock,
         )?)
     } else {
         None
@@ -232,7 +242,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let imu_names = simulation.imu_names(vehicle_name)?;
 
-        let handles = VehicleRosHandles::new(&node, vehicle_name, table_frame, imu_names)?;
+        let handles =
+            VehicleRosHandles::new(&node, vehicle_name, table_frame, imu_names, sim_clock)?;
 
         vehicle_ros_handles.insert(vehicle_name.clone(), handles);
     }
@@ -248,7 +259,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Table TF publish
     let table_poses = simulation.table_poses();
 
-    let tf_publishers = TfPublishers::new(dynamic_tf_publisher, static_tf_publisher);
+    let tf_publishers = TfPublishers::new(dynamic_tf_publisher, static_tf_publisher, sim_clock);
 
     tf_publishers.publish_static_frames(
         &table_poses,
@@ -269,6 +280,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &simulation_worker,
             vehicle_name.clone(),
             disturbance_timeout,
+            sim_clock,
         )?);
         let thruster_subscription =
             create_thruster_subscription(&simulation_worker, vehicle_name.clone())?;
@@ -305,7 +317,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |simulation: &mut Simulation, _time: rclrs::Time| {
             let time = simulation.time();
             if let Err(error) = clock_publisher.publish(Clock {
-                clock: sim_time_to_ros_time(time),
+                clock: sim_clock.to_ros(time),
             }) {
                 eprintln!("[sim] failed to publish clock: {error}");
             }

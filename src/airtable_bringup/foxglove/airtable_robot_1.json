@@ -36,12 +36,36 @@
           "layout": {
             "direction": "column",
             "splitPercentage": 50,
-            "first": "Plot!yaw",
-            "second": {
+            "first": {
               "direction": "row",
               "splitPercentage": 50,
-              "first": "Plot!error",
+              "first": "Plot!yaw",
+              "second": "Plot!velocity"
+            },
+            "second": {
+              "direction": "row",
+              "splitPercentage": 67,
+              "first": {
+                "direction": "row",
+                "splitPercentage": 50,
+                "first": "Plot!error_xy",
+                "second": "Plot!error_yaw"
+              },
               "second": "Plot!rw_pid"
+            }
+          }
+        },
+        {
+          "title": "太陽センサ",
+          "layout": {
+            "direction": "row",
+            "splitPercentage": 60,
+            "first": "3D!sun",
+            "second": {
+              "direction": "column",
+              "splitPercentage": 60,
+              "first": "Plot!sun_angles",
+              "second": "Plot!sun_status"
             }
           }
         }
@@ -68,6 +92,16 @@
           "label": "マーカー観測 external_pose",
           "color": "#1f77b4",
           "lineSize": 1.0,
+          "showLine": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/state/odometry.pose.pose.position.y",
+          "xValuePath": "/robot_1/state/odometry.pose.pose.position.x",
+          "enabled": true,
+          "label": "推定 state/odometry（EKF）",
+          "color": "#ff7f0e",
+          "lineSize": 1.5,
           "showLine": true,
           "timestampMethod": "receiveTime"
         },
@@ -312,6 +346,15 @@
         "/robot_1/sim/ground_truth": {
           "visible": true,
           "showCovariance": false
+        },
+        "/robot_1/state/odometry": {
+          "visible": true,
+          "showCovariance": false,
+          "type": "arrow",
+          "color": "#ff7f0e"
+        },
+        "/robot_1/measurements/sun_direction_marker": {
+          "visible": true
         }
       }
     },
@@ -332,6 +375,13 @@
           "timestampMethod": "receiveTime"
         },
         {
+          "value": "/robot_1/state/odometry.pose.pose.orientation.@rpy.yaw.@degrees",
+          "enabled": true,
+          "label": "推定（EKF）",
+          "color": "#ff7f0e",
+          "timestampMethod": "receiveTime"
+        },
+        {
           "value": "/robot_1/sim/ground_truth.pose.pose.orientation.@rpy.yaw.@degrees",
           "enabled": true,
           "label": "真値（simのみ）",
@@ -348,46 +398,6 @@
           "timestampMethod": "receiveTime"
         }
       ],
-      "isSynced": true,
-      "timeWindowMode": "sliding",
-      "followingViewWidth": 30,
-      "showLegend": true,
-      "legendDisplay": "floating",
-      "floatingLegendPosition": "top-left"
-    },
-    "Plot!error": {
-      "foxglovePanelTitle": "追従誤差（目標 − 状態）",
-      "paths": [
-        {
-          "value": "/robot_1/trajectory/error.vector.x",
-          "enabled": true,
-          "label": "x [m]",
-          "color": "#1f77b4",
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/robot_1/trajectory/error.vector.y",
-          "enabled": true,
-          "label": "y [m]",
-          "color": "#ff7f0e",
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/robot_1/trajectory/error.vector.z.@degrees",
-          "enabled": true,
-          "label": "yaw [deg]",
-          "color": "#2ca02c",
-          "yAxisId": "deg",
-          "timestampMethod": "receiveTime"
-        }
-      ],
-      "secondaryAxes": [
-        {
-          "id": "deg",
-          "label": "deg"
-        }
-      ],
-      "yAxisLabel": "m",
       "isSynced": true,
       "timeWindowMode": "sliding",
       "followingViewWidth": 30,
@@ -420,6 +430,192 @@
           "label": "正規化速度",
           "min": -1.05,
           "max": 1.05
+        }
+      ],
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 30,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "floatingLegendPosition": "top-left"
+    },
+    "Plot!velocity": {
+      "foxglovePanelTitle": "速度（機体座標）: 推定 vs 真値",
+      "paths": [
+        {
+          "value": "/robot_1/state/odometry.twist.twist.linear.x",
+          "enabled": true,
+          "label": "推定 vx [m/s]",
+          "color": "#ff7f0e",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/state/odometry.twist.twist.linear.y",
+          "enabled": true,
+          "label": "推定 vy [m/s]",
+          "color": "#9467bd",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/sim/ground_truth.twist.twist.linear.x",
+          "enabled": true,
+          "label": "真値 vx（simのみ）",
+          "color": "#2ca02c",
+          "timestampMethod": "receiveTime",
+          "lineStyle": "dotted"
+        },
+        {
+          "value": "/robot_1/sim/ground_truth.twist.twist.linear.y",
+          "enabled": true,
+          "label": "真値 vy（simのみ）",
+          "color": "#8c564b",
+          "timestampMethod": "receiveTime",
+          "lineStyle": "dotted"
+        },
+        {
+          "value": "/robot_1/state/odometry.twist.twist.angular.z.@degrees",
+          "enabled": true,
+          "label": "推定 yaw角速度 [deg/s]",
+          "color": "#d62728",
+          "timestampMethod": "receiveTime",
+          "yAxisId": "deg"
+        },
+        {
+          "value": "/robot_1/sim/ground_truth.twist.twist.angular.z.@degrees",
+          "enabled": true,
+          "label": "真値 yaw角速度（simのみ）",
+          "color": "#e377c2",
+          "timestampMethod": "receiveTime",
+          "lineStyle": "dotted",
+          "yAxisId": "deg"
+        }
+      ],
+      "secondaryAxes": [
+        {
+          "id": "deg",
+          "label": "deg/s"
+        }
+      ],
+      "yAxisLabel": "m/s",
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 30,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "floatingLegendPosition": "top-left"
+    },
+    "Plot!error_xy": {
+      "foxglovePanelTitle": "位置追従誤差 [m]（目標 − 状態）",
+      "paths": [
+        {
+          "value": "/robot_1/trajectory/error.vector.x",
+          "enabled": true,
+          "label": "x [m]",
+          "color": "#1f77b4",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/trajectory/error.vector.y",
+          "enabled": true,
+          "label": "y [m]",
+          "color": "#ff7f0e",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/trajectory/error.vector.z.@degrees",
+          "enabled": true,
+          "label": "yaw [deg]",
+          "color": "#2ca02c",
+          "yAxisId": "deg",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 30,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "floatingLegendPosition": "top-left"
+    },
+    "Plot!error_yaw": {
+      "foxglovePanelTitle": "yaw追従誤差 [deg]（目標 − 状態、負→時計回り指令）",
+      "paths": [],
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 30,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "floatingLegendPosition": "top-left"
+    },
+    "3D!sun": {
+      "foxglovePanelTitle": "太陽方向（機体固定）",
+      "followTf": "robot_1/base_link",
+      "followMode": "follow-pose",
+      "cameraState": {
+        "perspective": true,
+        "phi": 55,
+        "thetaOffset": 45,
+        "distance": 1.5,
+        "targetOffset": [
+          0,
+          0,
+          0.1
+        ]
+      },
+      "scene": {
+        "labelScaleFactor": 0.3,
+        "transforms": {
+          "showLabel": true,
+          "axisSize": 0.12
+        }
+      },
+      "topics": {
+        "/robot_1/measurements/sun_direction_marker": {
+          "visible": true
+        }
+      }
+    },
+    "Plot!sun_angles": {
+      "foxglovePanelTitle": "太陽角 [deg]",
+      "paths": [
+        {
+          "value": "/robot_1/measurements/sun_sensor.alpha_deg",
+          "enabled": true,
+          "label": "alpha",
+          "color": "#1f77b4",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/measurements/sun_sensor.beta_deg",
+          "enabled": true,
+          "label": "beta",
+          "color": "#ff7f0e",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 30,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "floatingLegendPosition": "top-left"
+    },
+    "Plot!sun_status": {
+      "foxglovePanelTitle": "受光強度 [%] / エラーコード",
+      "paths": [
+        {
+          "value": "/robot_1/measurements/sun_sensor.intensity_percent",
+          "enabled": true,
+          "label": "強度",
+          "color": "#2ca02c",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/robot_1/measurements/sun_sensor.error_code",
+          "enabled": true,
+          "label": "エラーコード",
+          "color": "#d62728",
+          "timestampMethod": "receiveTime"
         }
       ],
       "isSynced": true,

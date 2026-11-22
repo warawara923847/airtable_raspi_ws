@@ -129,7 +129,9 @@ def main(args=None):
                     f'sample_period={sample_period}s, seed={seed}; independent axes')
 
         def on_path(self, msg):
-            self.epoch = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+            # Integer nanoseconds: seconds as a float lose the sample boundaries at a
+            # Unix-epoch simulation clock (airtable_sim clock_origin:=wall).
+            self.epoch = msg.header.stamp.sec * 10**9 + msg.header.stamp.nanosec
 
         def on_active(self, msg):
             self.active = msg.data
@@ -149,21 +151,22 @@ def main(args=None):
 
         def update(self):
             now = self.get_clock().now()
-            time = now.nanoseconds * 1e-9
-            if self.last_time is not None and time < self.last_time:
+            time_ns = now.nanoseconds
+            if self.last_time is not None and time_ns < self.last_time:
                 self.epoch = None
                 self.active = False
                 self.last_sent = -1
-            self.last_time = time
+            self.last_time = time_ns
             if not self.wait and self.epoch is None:
-                self.epoch = time
+                self.epoch = time_ns
             if self.epoch is None or (self.wait and not self.active):
                 self.publish((0.0, 0.0, 0.0), now)
                 return
-            gain = profile_gain(self.profile, time - self.epoch, self.start,
+            elapsed = (time_ns - self.epoch) * 1e-9
+            gain = profile_gain(self.profile, elapsed, self.start,
                                 self.duration, self.period)
             if self.noise is not None and gain:
-                wrench = self.noise.sample(max(0.0, time - self.epoch - self.start))
+                wrench = self.noise.sample(max(0.0, elapsed - self.start))
             else:
                 wrench = [value * gain for value in self.wrench]
             self.publish(wrench, now)

@@ -57,7 +57,9 @@ TRACKING_KEYS = {'params', 'simulation_params', 'simulation_camera', 'camera_fra
 LEGACY_SIM_CAMERA = 'tracking_camera'
 # Black edge of the ArUco cards in the MJCF models (markers/card.obj).
 SIM_MARKER_SIZE = 0.1
-HARDWARE_KEYS = {'params', 'imu_frame', 'imu_mount', 'rw', 'rw_params'}
+HARDWARE_KEYS = {'params', 'imu_frame', 'imu_mount', 'rw', 'rw_params', 'sun_sensor'}
+SUN_SENSOR_KEYS = {'params', 'frame', 'mount'}
+SUN_SENSOR_DEFAULT_PARAMS = 'package://airtable_bringup/config/nanossoc.yaml'
 # Reaction wheel fitted to the real robot. It selects both the Pi's airtable_hardware
 # parameters (rw_params, layered over params) and the PC's manual RW control:
 #   none   - no wheel
@@ -194,6 +196,23 @@ def _check_overrides(overrides, base, where):
                               f'{type(known[name]).__name__} in the referenced file')
 
 
+def _sun_sensor(spec, namespace, where, resolve):
+    """Resolve ``hardware.sun_sensor``; absent or null means no sensor on this robot."""
+    if spec is None:
+        return None
+    where = f'{where}.hardware.sun_sensor'
+    spec = _mapping(spec, where, SUN_SENSOR_KEYS)
+    frame = spec.get('frame', f'{namespace}/sun_sensor_link')
+    if not isinstance(frame, str) or not frame:
+        raise ConfigError(f'{where}.frame must be a non-empty string')
+    mount = spec.get('mount')
+    return {
+        'params': resolve(spec.get('params') or SUN_SENSOR_DEFAULT_PARAMS, f'{where}.params'),
+        'frame': frame,
+        'mount': None if mount is None else _finite_list(mount, 6, f'{where}.mount'),
+    }
+
+
 def _hardware(hardware, namespace, where, resolve):
     """Resolve one robot's ``hardware`` section."""
     imu_mount = hardware.get('imu_mount')
@@ -217,6 +236,7 @@ def _hardware(hardware, namespace, where, resolve):
         'rw': rw,
         'rw_params': None if rw_params is None else resolve(
             rw_params, f'{where}.hardware.rw_params'),
+        'sun_sensor': _sun_sensor(hardware.get('sun_sensor'), namespace, where, resolve),
     }
 
 
@@ -481,9 +501,16 @@ TRAJECTORY_ARGUMENTS = {
 }
 
 
+# Launch arguments [s] for top-level parameters shared by the controller and pulse modulator.
+PULSE_ARGUMENTS = {'pulse_duration': 'pulse_duration_s', 'pulse_period': 'pulse_period_s'}
+
+
 def launch_trajectory_overrides(arguments):
     """Convert non-empty trajectory launch arguments to nested parameter overrides."""
     overrides = {}
+    for argument, parameter in PULSE_ARGUMENTS.items():
+        if arguments.get(argument, ''):
+            overrides[parameter] = float(arguments[argument])
     for argument, (group, parameter) in TRAJECTORY_ARGUMENTS.items():
         value = arguments.get(argument, '')
         if value:
@@ -511,12 +538,42 @@ def effective_trajectory(robot, launch_overrides=None):
     center = trajectory.get('circle_center_m', [])
     if center:
         _finite_list(center, 2, f'{where}: trajectory.circle_center_m')
+    width, period = pulse_timing(params)
+    if not (math.isfinite(width) and math.isfinite(period) and 0.002 <= width <= 0.5 and
+            width <= period <= 1.0):
+        raise ConfigError(f'{where}: need 0.002 <= pulse_duration_s ({width}) <= '
+                          f'pulse_period_s ({period}) <= 1 s')
     bounds = params.get('limits', {}).get('position_bounds_m')
     if bounds is not None:
         bounds = _finite_list(bounds, 4, f'{where}: limits.position_bounds_m')
         if bounds[0] >= bounds[1] or bounds[2] >= bounds[3]:
             raise ConfigError(f'{where}: limits.position_bounds_m must be [xmin,xmax,ymin,ymax]')
     return params
+
+
+def pulse_timing(params):
+    """Pulse width and period [s] of effective trajectory parameters (period: width)."""
+    width = float(params.get('pulse_duration_s', 0.01))
+    return width, float(params.get('pulse_period_s', width))
+
+
+def pulse_thrust_caps(robot, params):
+    """
+    Lower max_thrust_n to the average a pulse train can deliver: on_thrust_n * width/period.
+
+    Returns thruster overrides for the allocator and modulator (empty when nothing is capped),
+    so the controller never asks for more than one pulse per period.
+    """
+    width, period = pulse_timing(params)
+    thrusters = merge(robot['thruster_base'], robot['thruster_overrides'])['thrusters']
+    caps = {}
+    for name in thrusters['names']:
+        spec = thrusters[name]
+        maximum = float(spec.get('max_thrust_n', 0.5))
+        limit = float(spec.get('on_thrust_n', maximum)) * min(1.0, width / period)
+        if maximum > limit + 1e-12:
+            caps[name] = {'max_thrust_n': limit}
+    return {'thrusters': caps} if caps else {}
 
 
 def initial_pose(robot, params, arguments=None):

@@ -9,6 +9,7 @@ Open RViz, attaching to an already running sim or real robot. docs/adr/0019.
 The generated view shows per robot a table grid, target path/pose, actual path/pose
 and the ArUco pose in a distinct colour set. rviz_config:=tracking / tracking_real
 open the fixed robot_1 camera layouts in rviz/, or give a .rviz path.
+rviz_config:=sun_sensor plant:=real shows the sun direction fixed to robot_1/base_link.
 """
 
 from airtable_bringup.launch_helpers import (
@@ -22,7 +23,8 @@ ARGUMENTS = [
     CONFIG_ARGUMENT,
     ('robots', '', 'Comma-separated robots; empty: all'),
     ('fixed_frame', 'world', 'Fixed frame; a table frame when world is not calibrated'),
-    ('rviz_config', '', 'Empty: generated; tracking | tracking_real | path to a .rviz file'),
+    ('rviz_config', '', 'Empty: generated; tracking | tracking_real | sun_sensor | '
+                    'path to a .rviz file'),
 ]
 
 

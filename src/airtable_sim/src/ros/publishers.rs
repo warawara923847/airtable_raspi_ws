@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use crate::actuators::ReactionWheelStateData;
 use crate::disturbance::AppliedDisturbance;
-use crate::ros::conversions::sim_time_to_ros_time;
+use crate::ros::conversions::SimClock;
 use crate::sensors::ImuState;
 use crate::state::PlanarState;
 
@@ -25,17 +25,19 @@ pub struct GroundTruthPublisher {
 
     frame_id: String,
     child_frame_id: String,
+    clock: SimClock,
 }
 
 pub struct DisturbancePublisher {
     publisher: Publisher<WrenchStamped>,
     body_frame: String,
+    clock: SimClock,
 }
 
 impl DisturbancePublisher {
     pub fn publish(&self, applied: &AppliedDisturbance) -> Result<(), rclrs::RclrsError> {
         let mut msg = WrenchStamped::default();
-        msg.header.stamp = sim_time_to_ros_time(applied.time);
+        msg.header.stamp = self.clock.to_ros(applied.time);
         msg.header.frame_id = self.body_frame.clone();
         msg.wrench.force.x = applied.body_wrench[0];
         msg.wrench.force.y = applied.body_wrench[1];
@@ -46,11 +48,13 @@ impl DisturbancePublisher {
 
 pub struct ReactionWheelStatePublisher {
     publisher: Publisher<ReactionWheelState>,
+    clock: SimClock,
 }
 
 pub struct ImuPublisher {
     publisher: Publisher<Imu>,
     frame_id: String,
+    clock: SimClock,
 }
 
 impl VehicleRosHandles {
@@ -59,6 +63,7 @@ impl VehicleRosHandles {
         vehicle_name: &str,
         table_frame: String,
         imu_names: Vec<String>,
+        clock: SimClock,
     ) -> Result<Self, rclrs::RclrsError> {
         // GT publisher
         let gt_topic = format!("/{vehicle_name}/sim/ground_truth");
@@ -68,18 +73,20 @@ impl VehicleRosHandles {
             gt_ros_publisher,
             table_frame.clone(),
             format!("{vehicle_name}/base_link"),
+            clock,
         );
         let disturbance_topic = format!("/{vehicle_name}/sim/disturbance/applied");
         let disturbance_publisher = DisturbancePublisher {
             publisher: node.create_publisher::<WrenchStamped>(disturbance_topic.as_str())?,
             body_frame: format!("{vehicle_name}/base_link"),
+            clock,
         };
 
         // RW state publisher
         let rw_state_topic = format!("/{vehicle_name}/actuators/reaction_wheels/state");
         let rw_ros_publisher =
             node.create_publisher::<ReactionWheelState>(rw_state_topic.as_str())?;
-        let rw_state_publisher = ReactionWheelStatePublisher::new(rw_ros_publisher);
+        let rw_state_publisher = ReactionWheelStatePublisher::new(rw_ros_publisher, clock);
 
         // IMU publishers
         let mut imu_publishers = HashMap::new();
@@ -90,7 +97,7 @@ impl VehicleRosHandles {
             let ros_publisher = node.create_publisher::<Imu>(topic.as_str().sensor_data_qos())?;
 
             let imu_publisher =
-                ImuPublisher::new(ros_publisher, format!("{vehicle_name}/{imu_name}"));
+                ImuPublisher::new(ros_publisher, format!("{vehicle_name}/{imu_name}"), clock);
 
             imu_publishers.insert(imu_name, imu_publisher);
         }
@@ -110,11 +117,13 @@ impl GroundTruthPublisher {
         publisher: Publisher<Odometry>,
         frame_id: impl Into<String>,
         child_frame_id: impl Into<String>,
+        clock: SimClock,
     ) -> Self {
         Self {
             publisher,
             frame_id: frame_id.into(),
             child_frame_id: child_frame_id.into(),
+            clock,
         }
     }
 
@@ -124,10 +133,7 @@ impl GroundTruthPublisher {
         // ------------------------------------------------
         // Timestamp
         // ------------------------------------------------
-        let (sec, nanosec) = simulation_time_to_ros_time(state.time);
-
-        msg.header.stamp.sec = sec;
-        msg.header.stamp.nanosec = nanosec;
+        msg.header.stamp = self.clock.to_ros(state.time);
 
         // pose is expressed in world frame
         msg.header.frame_id = self.frame_id.clone();
@@ -176,8 +182,8 @@ impl GroundTruthPublisher {
 }
 
 impl ReactionWheelStatePublisher {
-    pub fn new(publisher: rclrs::Publisher<ReactionWheelState>) -> Self {
-        Self { publisher }
+    pub fn new(publisher: rclrs::Publisher<ReactionWheelState>, clock: SimClock) -> Self {
+        Self { publisher, clock }
     }
 
     pub fn publish(
@@ -187,10 +193,7 @@ impl ReactionWheelStatePublisher {
     ) -> Result<(), rclrs::RclrsError> {
         let mut msg = ReactionWheelState::default();
 
-        let (sec, nanosec) = simulation_time_to_ros_time(time);
-
-        msg.stamp.sec = sec;
-        msg.stamp.nanosec = nanosec;
+        msg.stamp = self.clock.to_ros(time);
 
         for state in states {
             msg.names.push(state.name.clone());
@@ -206,17 +209,22 @@ impl ReactionWheelStatePublisher {
 }
 
 impl ImuPublisher {
-    pub fn new(publisher: rclrs::Publisher<Imu>, frame_id: impl Into<String>) -> Self {
+    pub fn new(
+        publisher: rclrs::Publisher<Imu>,
+        frame_id: impl Into<String>,
+        clock: SimClock,
+    ) -> Self {
         Self {
             publisher: publisher,
             frame_id: frame_id.into(),
+            clock,
         }
     }
 
     pub fn publish(&self, time: f64, state: &ImuState) -> Result<(), rclrs::RclrsError> {
         let mut msg = Imu::default();
 
-        msg.header.stamp = sim_time_to_ros_time(time);
+        msg.header.stamp = self.clock.to_ros(time);
         msg.header.frame_id = self.frame_id.clone();
 
         msg.orientation.x = state.orientation_wxyz[1];
@@ -234,14 +242,4 @@ impl ImuPublisher {
 
         self.publisher.publish(msg)
     }
-}
-
-fn simulation_time_to_ros_time(time_s: f64) -> (i32, u32) {
-    let total_ns = (time_s * 1.0e9).round() as i64;
-
-    let sec = total_ns.div_euclid(1_000_000_000);
-
-    let nanosec = total_ns.rem_euclid(1_000_000_000);
-
-    (sec as i32, nanosec as u32)
 }

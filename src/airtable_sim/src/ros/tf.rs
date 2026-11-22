@@ -2,18 +2,25 @@ use geometry_msgs::msg::TransformStamped;
 use rclrs::Publisher;
 use tf2_msgs::msg::TFMessage;
 
+use crate::ros::conversions::SimClock;
 use crate::state::{PlanarState, TablePose};
 
 pub struct TfPublishers {
     dynamic_tf: Publisher<TFMessage>,
     static_tf: Publisher<TFMessage>,
+    clock: SimClock,
 }
 
 impl TfPublishers {
-    pub fn new(dynamic_tf: Publisher<TFMessage>, static_tf: Publisher<TFMessage>) -> Self {
+    pub fn new(
+        dynamic_tf: Publisher<TFMessage>,
+        static_tf: Publisher<TFMessage>,
+        clock: SimClock,
+    ) -> Self {
         Self {
             dynamic_tf,
             static_tf,
+            clock,
         }
     }
 
@@ -40,10 +47,7 @@ impl TfPublishers {
     ) -> Result<(), rclrs::RclrsError> {
         let mut tf = TransformStamped::default();
 
-        let (sec, nanosec) = simulation_time_to_ros_time(state.time);
-
-        tf.header.stamp.sec = sec;
-        tf.header.stamp.nanosec = nanosec;
+        tf.header.stamp = self.clock.to_ros(state.time);
 
         tf.header.frame_id = table_name.to_string();
 
@@ -86,11 +90,4 @@ fn table_pose_to_transform(table: &TablePose) -> TransformStamped {
     tf.transform.rotation.z = table.orientation_wxyz[3];
 
     tf
-}
-
-fn simulation_time_to_ros_time(time: f64) -> (i32, u32) {
-    let sec = time.floor() as i32;
-    let nanosec = ((time - sec as f64) * 1e9) as u32;
-
-    (sec, nanosec)
 }

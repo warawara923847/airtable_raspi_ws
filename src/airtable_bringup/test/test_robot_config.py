@@ -61,6 +61,28 @@ class RobotConfigTest(unittest.TestCase):
             rc.load_robot_config(self.write(self.dual_text(
                 '    hardware: {imu_mount: [0, 0]}')), no_share, hardware_only=True)
 
+    def test_pulse_period_caps_the_allocator_thrust(self):
+        """pulse_duration/pulse_period: one pulse per period bounds the average thrust."""
+        robot = self.load('single_robot.yaml')['robots'][0]
+        default = rc.effective_trajectory(robot)
+        self.assertEqual(rc.pulse_timing(default), (0.01, 0.01))
+        self.assertEqual(rc.pulse_thrust_caps(robot, default), {})
+        width_only = rc.effective_trajectory(
+            robot, rc.launch_trajectory_overrides({'pulse_duration': '0.02'}))
+        self.assertEqual(rc.pulse_timing(width_only), (0.02, 0.02))
+        self.assertEqual(rc.pulse_thrust_caps(robot, width_only), {})
+        slow = rc.effective_trajectory(robot, rc.launch_trajectory_overrides(
+            {'pulse_duration': '0.02', 'pulse_period': '0.1'}))
+        self.assertEqual(rc.pulse_timing(slow), (0.02, 0.1))
+        caps = rc.pulse_thrust_caps(robot, slow)['thrusters']
+        self.assertEqual(sorted(caps), ['thruster_1', 'thruster_2', 'thruster_3', 'thruster_4'])
+        for cap in caps.values():
+            self.assertAlmostEqual(cap['max_thrust_n'], 0.5 * 0.02 / 0.1)
+        for bad in ({'pulse_duration': '0.02', 'pulse_period': '0.01'},
+                    {'pulse_duration': '0.001'}, {'pulse_period': '2.0'}):
+            with self.assertRaisesRegex(rc.ConfigError, 'pulse_duration_s'):
+                rc.effective_trajectory(robot, rc.launch_trajectory_overrides(bad))
+
     def test_reaction_wheel_type_selects_the_wheel_parameters(self):
         """hardware.rw picks a default wheel file; none needs none; typos are rejected."""
         single = self.load('single_robot.yaml')['robots'][0]['hardware']
@@ -87,6 +109,25 @@ class RobotConfigTest(unittest.TestCase):
         self.assertEqual(custom['rw_params'], self.dir / 'wheel.yaml')
         for extra, fragment in [('    hardware: {rw: sg90}', 'hardware.rw must be one of'),
                                 ('    hardware: {rw_params: wheel.yaml}', 'needs hardware.rw')]:
+            with self.assertRaisesRegex(rc.ConfigError, fragment):
+                rc.load_robot_config(self.write(self.dual_text(extra)), share)
+
+    def test_sun_sensor_section(self):
+        """hardware.sun_sensor is optional; defaults are per robot; typos are rejected."""
+        single = self.load('single_robot.yaml')['robots'][0]['hardware']['sun_sensor']
+        self.assertEqual(single['params'], PACKAGE / 'config' / 'nanossoc.yaml')
+        self.assertEqual(single['frame'], 'robot_1/sun_sensor_link')
+        self.assertEqual(len(single['mount']), 6)
+        for robot in self.load('dual_robot.yaml')['robots']:
+            self.assertIsNone(robot['hardware']['sun_sensor'])
+        default = rc.load_robot_config(self.write(self.dual_text(
+            '    hardware: {sun_sensor: {}}')), share)['robots'][1]['hardware']['sun_sensor']
+        self.assertEqual(default, {'params': PACKAGE / 'config' / 'nanossoc.yaml',
+                                   'frame': 'robot_2/sun_sensor_link', 'mount': None})
+        for extra, fragment in [
+                ('    hardware: {sun_sensor: {mount: [0, 0]}}', 'mount must be a list of 6'),
+                ('    hardware: {sun_sensor: {frame: ""}}', 'frame must be a non-empty'),
+                ('    hardware: {sun_sensor: {bus: 1}}', 'unknown keys')]:
             with self.assertRaisesRegex(rc.ConfigError, fragment):
                 rc.load_robot_config(self.write(self.dual_text(extra)), share)
 

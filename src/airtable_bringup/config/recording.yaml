@@ -45,9 +45,11 @@ topic_groups:
     - '{ns}/imu/data_raw'
     - '{ns}/joint_states'
     - '{ns}/actuators/xy_table/trajectory'
+    - '{ns}/measurements/sun_sensor'  # nanoSSOC-D60 angles, intensity, error code
+    - '{ns}/measurements/sun_direction_marker'  # arrow from sun_direction (PC)
   tracking:
     - '{ns}/measurements/external_pose'
-    - '{ns}/state/odometry'  # reserved estimator output; currently not implemented
+    - '{ns}/state/odometry'  # estimator (EKF) output with state_source:=estimator
     - '{ns}/tracking/layout'  # table outline and fixed markers (latched)
     # Raw ArUco poses are not listed here: subscribing to a fixed marker keeps its detector
     # running after calibration (docs/adr/0023). record:=true adds the moving marker's
@@ -72,6 +74,7 @@ topic_groups:
     - '{ns}/actuators/xy_table/trajectory'
     - '{ns}/imu/data_raw'
     - '{ns}/joint_states'
+    - '{ns}/measurements/sun_sensor'
 
 profiles:
   sim:

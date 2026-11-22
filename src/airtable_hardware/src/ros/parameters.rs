@@ -8,6 +8,7 @@ use crate::devices::continuous_servo_wheel::{ContinuousServoConfig, ContinuousSe
 use crate::devices::reaction_wheel::{DebugReactionWheel, DebugWheelConfig};
 use crate::devices::thruster::Thruster;
 use crate::drivers::arw3m::DEFAULT_ADDRESS;
+use crate::drivers::nanossoc_d60::{self, DummySunBus, NanoSsocD60};
 use crate::drivers::servo::{ServoCalibration, ServoDriver};
 use crate::drivers::valve::ValveDriver;
 use crate::hardware::ReactionWheel;
@@ -108,6 +109,89 @@ impl ThrusterParameters {
                 )
             })
             .collect())
+    }
+}
+
+pub struct SunSensorParameters {
+    enabled: ReadOnlyParameter<bool>,
+    backend: ReadOnlyParameter<Arc<str>>,
+    i2c_bus: ReadOnlyParameter<Arc<str>>,
+    i2c_address: ReadOnlyParameter<i64>,
+    period_ms: ReadOnlyParameter<i64>,
+    frame_id: ReadOnlyParameter<Arc<str>>,
+}
+
+impl SunSensorParameters {
+    pub fn declare(node: &Node) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self {
+            enabled: node
+                .declare_parameter("sun_sensor.enabled")
+                .default(false)
+                .read_only()?,
+            backend: node
+                .declare_parameter("sun_sensor.backend")
+                .default(Arc::<str>::from("i2c"))
+                .read_only()?,
+            i2c_bus: node
+                .declare_parameter("sun_sensor.i2c_bus")
+                .default(Arc::<str>::from("/dev/i2c-1"))
+                .read_only()?,
+            i2c_address: node
+                .declare_parameter("sun_sensor.i2c_address")
+                .default(i64::from(nanossoc_d60::DEFAULT_ADDRESS))
+                .read_only()?,
+            period_ms: node
+                .declare_parameter("sun_sensor.period_ms")
+                .default(100_i64)
+                .read_only()?,
+            frame_id: node
+                .declare_parameter("sun_sensor.frame_id")
+                .default(Arc::<str>::from("sun_sensor_link"))
+                .read_only()?,
+        })
+    }
+
+    pub fn period(&self) -> Result<Duration, Box<dyn std::error::Error>> {
+        let period = Duration::from_millis(u64::try_from(self.period_ms.get())?);
+        if period.is_zero() {
+            return Err("sun_sensor.period_ms must be positive".into());
+        }
+        Ok(period)
+    }
+
+    pub fn frame_id(&self) -> Result<Arc<str>, Box<dyn std::error::Error>> {
+        let frame_id = self.frame_id.get();
+        if frame_id.is_empty() {
+            return Err("sun_sensor.frame_id must not be empty".into());
+        }
+        Ok(frame_id)
+    }
+
+    /// None when disabled. An unopenable bus is a setup error; an unanswering sensor is not.
+    pub fn create_driver(&self) -> Result<Option<NanoSsocD60>, Box<dyn std::error::Error>> {
+        if !self.enabled.get() {
+            return Ok(None);
+        }
+        let backend = self.backend.get();
+        let bus: Box<dyn crate::io::i2c::I2cBus> = match backend.as_ref() {
+            "dummy" => {
+                eprintln!("[hardware] sun_sensor.backend is dummy: publishing a simulated sun");
+                Box::new(DummySunBus::new())
+            }
+            "i2c" => {
+                let path = self.i2c_bus.get();
+                let address = u8::try_from(self.i2c_address.get())?;
+                let bus = LinuxI2c::open(path.as_ref(), address).map_err(std::io::Error::other)?;
+                println!("[hardware] sun sensor on {path} address 0x{address:02x}");
+                Box::new(bus)
+            }
+            backend => {
+                return Err(
+                    format!("unknown sun_sensor.backend: {backend}; use i2c or dummy").into(),
+                );
+            }
+        };
+        Ok(Some(NanoSsocD60::new(bus)))
     }
 }
 

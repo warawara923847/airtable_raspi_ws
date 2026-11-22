@@ -54,7 +54,7 @@ ros2 launch airtable_bringup hardware.launch.py record:=true record_label:=manua
 | `record` | `false` | 録画する |
 | `record_label` | `<launch名>_<plant>` | 実験名（英数字・`_`・`.`・`-`、80文字まで） |
 | `record_profile` | 空 | 空ならPCは`sim`/`real`、Piは`hardware` |
-| `record_images` | `false` | PCのみ。構成ファイルの`tracking`にある画像とcamera_infoも録る |
+| `record_images` | `false` | PCのみ。構成ファイルの`tracking`にある画像とcamera_info、`tracking:=true`ならArUco検出結果の画像（`aruco_single_<ID>/result`）も録る |
 | `record_note` | 空 | `experiment.yaml`へのメモ |
 | `record_output_root` | 空 | 空なら起動したディレクトリの`recordings/` |
 | `record_config` | 空 | 録画YAML。空なら`config/recording.yaml` |
@@ -92,7 +92,8 @@ ros2 launch airtable_bringup manual.launch.py plant:=real tracking:=true foxglov
 - 既定は読み取り専用です。Foxgloveのパネルから実機へ指令トピックを送れないようにしています。
   パラメータの変更やサービス呼び出し（`trajectory/enable`など）が必要なときだけ
   `foxglove_readonly:=false`にしてください。
-- simでは`use_sim_time`で動き、Foxgloveの時刻もsim時刻です。
+- simでは`use_sim_time`で動き、Foxgloveの時刻もsim時刻です。sim時刻は既定でsim起動時の
+  実時刻から始まります（`sim_clock_origin:=zero`で従来の0開始。MuJoCo内部の時刻は常に0開始）。
 - 実機ではPiにBridgeを入れず、PCのBridgeがDDS越しにPiのトピック（IMU等）も配信します。
 - 3Dパネルの表示座標系は`table_1`、テーブル枠と既知マーカーは`/robot_1/tracking/layout`です。
 - 実カメラの画像（848×480×90 Hz）は帯域が大きいので、別PCから見る場合は画像パネルを必要な時だけ開きます。
@@ -107,15 +108,15 @@ ros2 launch airtable_bringup manual.launch.py plant:=real tracking:=true foxglov
 
 | タブ | パネル | 内容 |
 |---|---|---|
-| 軌跡・アクチュエータ | XY軌跡（table_1） | 目標`trajectory/reference`（破線）、マーカー観測`measurements/external_pose`、simの真値`sim/ground_truth`（点線）をx–y平面に重ねる |
+| 軌跡・アクチュエータ | XY軌跡（table_1） | 目標`trajectory/reference`（破線）、マーカー観測`measurements/external_pose`、推定`state/odometry`（オレンジ）、simの真値`sim/ground_truth`（点線）をx–y平面に重ねる |
 | | バルブ開閉 | thruster_1〜4の開（赤）・閉（灰）の帯。`actuators/thrusters/valve_state`（下記） |
 | | RW 回転速度・速度指令 | 角速度（sim・ARW-3m）と正規化速度指令（SG90-HV、右軸） |
 | | RW トルク | トルク指令`command`と適用トルク`state.applied_torques` |
-| 3D・カメラ | 上面図 | テーブル枠・既知マーカー、目標経路`trajectory/path`、実軌跡、各Pose |
+| 3D・カメラ | 上面図 | テーブル枠・既知マーカー、目標経路`trajectory/path`、実軌跡、各Pose（推定はオレンジの矢印） |
 | | 機体マーカー検出 | `tracking/aruco_single_50/result`（sim・実機共通） |
-| 姿勢・追従誤差 | yaw / 追従誤差 / RW姿勢PID | yawの比較、`trajectory/error`、SG90-HVの`rw_attitude/debug` |
+| 姿勢・追従誤差 | yaw / 速度 / 位置追従誤差 / yaw追従誤差 / RW姿勢PID | yawの比較（観測・推定・真値・目標）、推定と真値の機体座標速度・yaw角速度、`trajectory/error`（位置 [m] とyaw [deg] を別パネル）、SG90-HVの`rw_attitude/debug` |
 
-- そのモードで出ないトピックの系列は空のままです。目標と追従誤差は`trajectory.launch.py`だけ、
+- そのモードで出ないトピックの系列は空のままです。目標と追従誤差は`trajectory.launch.py`だけ、推定は`state_source:=estimator`だけ、
   RWトルク指令は手動（軌道追従ではRW制御を止める）、速度指令とPIDはSG90-HV実機だけ、真値はsimだけです。
 - XY軌跡は時刻順に点をつないで描くので、再生位置までの軌跡になります。縦横の縮尺は自動で、
   1:1にはなりません。形の比較には「3D・カメラ」の上面図を使ってください。
@@ -133,6 +134,57 @@ ros2 launch airtable_bringup manual.launch.py plant:=real tracking:=true foxglov
 - **指令から計算した状態**で、実測ではありません。実機ではPiがWi-Fi遅延の後に開き、5 msの
   タイマで閉じます。hardwareの`max_pulse_ms`による制限も反映しません。
 - 録画の`sim`/`real`プロファイルにも含まれます。古いbagには入っていません。
+
+## Foxgloveのクラウドへアップロードする（upload:=true）
+
+PCの`manual.launch.py` / `trajectory.launch.py`で`record:=true upload:=true`を付けると、
+Ctrl+Cで録画の保存が完了したあと、その実験のMCAPをFoxgloveへ送ります。既定は無効です。
+
+```bash
+# 初回のみ：セッションのプロパティとデバイスを定義する（組織の管理者権限が必要、再実行しても安全）
+foxglove auth login
+ros2 run airtable_bringup experiment_bag foxglove-setup
+
+ros2 launch airtable_bringup trajectory.launch.py trajectory:=circle tracking:=true \
+  foxglove:=true record:=true upload:=true record_label:=circle_r020
+
+# 録画済みの実験を後から送る、失敗した分を送り直す
+ros2 run airtable_bringup experiment_bag upload recordings/<実験ディレクトリ>
+foxglove pending-imports list   # 取り込み待ち・失敗の確認
+
+# simの円軌道だけを一覧する
+foxglove sessions list --query 'plant:sim trajectory:circle'
+```
+
+実験1回が1セッションになり、分割された録画もまとまります。セッション名は
+`<sim|real>_<record_label>_<開始日時>`（例: `sim_circle_r020_2026-11-21_1132`、PCの現地時刻）で、
+同じ分に同じ名前があれば末尾に`_2`を付けます。録画のファイル名には実験ディレクトリ名を残すので、
+手元のデータと対応を取れます。以前の形式のセッションは`experiment_bag upload`を再実行すると改名されます。
+セッションには次のプロパティを付けます。launch引数を省略した場合も、実際に使った値が入ります。
+
+| プロパティ | 値 |
+|---|---|
+| `plant` | `sim` / `real` |
+| `launch` | `manual` / `trajectory` |
+| `trajectory` | `line` / `circle` / `mixed`（機体ごとに異なる）。manualでは付かない |
+| `state_source` | `truth` / `estimator` / `external`。manualでは付かない |
+
+| 引数 | 既定 | 内容 |
+|---|---|---|
+| `upload` | `false` | 録画完了後にアップロードする。`record:=true`が必要 |
+| `upload_device` | `airtable-pc` | Foxgloveのデバイス名 |
+| `upload_project` | 空 | プロジェクトID。空ならCLIの既定 |
+
+- 送信はlaunchとは別プロセスで続くので、launchが終わっても止まりません。進行は実験ディレクトリの
+  `foxglove_upload.log`、ファイルごとの結果は`foxglove_upload.yaml`に残ります。
+- Foxglove上の名前は`<実験ディレクトリ名>_bag_N.mcap`です。送信済みの分割ファイルは再実行しても
+  送りません（`--force`で再送）。
+- プロパティが未定義のときはデータを送らず、`foxglove_upload.log`に`foxglove-setup`の実行を促します。
+  定義後に`experiment_bag upload`で送り直せます。
+- 正常に完了した録画だけを送ります。時刻が1970年付近の古いsim録画は、実験同士の時間帯が重なるので
+  既定で拒否します（`--allow-epoch-time`で送信可）。
+- `record_images:=true`は容量が大きく、simの検証では33秒で447 MBでした。Foxgloveの無料プランの
+  ストレージは10 GBなので、画像付きは必要な試行だけにします。
 
 ## 単独で録画する
 

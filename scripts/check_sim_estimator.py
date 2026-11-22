@@ -12,6 +12,8 @@ domain (docs/adr/0024) and reports
 
   scripts/check_sim_estimator.py                       # circle, one period after start-up
   scripts/check_sim_estimator.py --trajectory line --baseline
+  scripts/check_sim_estimator.py --baseline --launch-arg pulse_duration:=0.02 \
+      --launch-arg pulse_period:=0.1                   # slow valves: 20 ms every 100 ms
 """
 
 import argparse
@@ -74,6 +76,7 @@ def rate(messages, start, end):
 
 def run(args, source, log_dir, domain):
     """Launch one configuration and return its metrics."""
+    from airtable_interfaces.msg import ThrusterPulseCommand
     from geometry_msgs.msg import PoseWithCovarianceStamped
     from nav_msgs.msg import Odometry
     import rclpy
@@ -83,7 +86,7 @@ def run(args, source, log_dir, domain):
     rclpy.init(args=[])
     node = rclpy.create_node('estimator_check', parameter_overrides=[
         Parameter('use_sim_time', value=True)])
-    truths, estimates, references, observations, ages = [], [], [], [], []
+    truths, estimates, references, observations, ages, pulses = [], [], [], [], [], []
 
     def receive_estimate(msg):
         estimates.append(msg)
@@ -96,6 +99,8 @@ def run(args, source, log_dir, domain):
                                  references.append, 200),
         node.create_subscription(PoseWithCovarianceStamped,
                                  '/robot_1/measurements/external_pose', observations.append, 200),
+        node.create_subscription(ThrusterPulseCommand, '/robot_1/actuators/thrusters/pulse',
+                                 pulses.append, 200),
     ]
     command = ['ros2', 'launch', 'airtable_bringup', 'trajectory.launch.py',
                f'trajectory:={args.trajectory}', f'period:={args.period}', 'viewer:=false',
@@ -103,6 +108,7 @@ def run(args, source, log_dir, domain):
                f'tracking:={"true" if source == "estimator" else "false"}']
     if args.estimator_params and source == 'estimator':
         command.append(f'estimator_params:={args.estimator_params}')
+    command += args.launch_arg
     label = f'{args.trajectory}_{source}'
     try:
         deadline = time.monotonic() + 1
@@ -148,6 +154,27 @@ def run(args, source, log_dir, domain):
         'tracking_xy_rmse_m': rms(tracking_xy), 'tracking_xy_max_m': max(tracking_xy),
         'tracking_yaw_rmse_rad': rms(tracking_yaw),
         'tracking_yaw_max_rad': max(map(abs, tracking_yaw)),
+    }
+    # Pulse train actually sent: widths, the shortest start-to-start time of one thruster,
+    # and the valve open fraction (commanded) over the measured interval.
+    fired = {}
+    widths = set()
+    for pulse in pulses:
+        t = pulse.stamp.sec + pulse.stamp.nanosec * 1e-9
+        if not start <= t <= end:
+            continue
+        width = pulse.pulse_duration.sec + pulse.pulse_duration.nanosec * 1e-9
+        widths.add(round(width * 1e3, 3))
+        for name in pulse.names:
+            fired.setdefault(name, []).append((t, width))
+    intervals = [b[0] - a[0] for train in fired.values() for a, b in zip(train, train[1:])]
+    report |= {
+        'pulse_widths_ms': sorted(widths),
+        'pulse_min_interval_ms': min(intervals) * 1e3 if intervals else None,
+        'pulses_per_s': {name: len(train) / (end - start)
+                         for name, train in sorted(fired.items())},
+        'open_fraction': {name: sum(w for _, w in train) / (end - start)
+                          for name, train in sorted(fired.items())},
     }
     if source == 'estimator':
         position, heading, velocity, yaw_rate, series = [], [], [], [], []
@@ -199,6 +226,9 @@ def main():
                         help='Seconds after the first reference excluded from metrics')
     parser.add_argument('--domain-id', type=int, default=176)
     parser.add_argument('--estimator-params', default='', help='Override estimator_params:=')
+    parser.add_argument('--launch-arg', action='append', default=[], metavar='NAME:=VALUE',
+                        help='Extra trajectory.launch.py argument for every run, e.g. '
+                             'pulse_duration:=0.02 (repeatable)')
     parser.add_argument('--baseline', action='store_true',
                         help='Also run state_source:=truth for comparison')
     parser.add_argument('--max-tracking-xy-rmse', type=float, default=0.02)

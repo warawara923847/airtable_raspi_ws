@@ -31,11 +31,11 @@ import time
 import numpy as np
 import yaml
 
-# Thruster pairs with a nominally pure force or torque, each followed by its opposite.
-DEFAULT_SETS = [
-    ('forward', ['thruster_3', 'thruster_4']), ('backward', ['thruster_1', 'thruster_2']),
-    ('left', ['thruster_1', 'thruster_4']), ('right', ['thruster_2', 'thruster_3']),
-    ('ccw', ['thruster_1', 'thruster_3']), ('cw', ['thruster_2', 'thruster_4']),
+# Motions fired in this order; each is followed by its opposite so the robot stays put.
+# The thruster pair of each is chosen from the geometry of thrusters.yaml (pure_pairs).
+MOTIONS = [
+    ('forward', (1, 0, 0)), ('backward', (-1, 0, 0)), ('left', (0, 1, 0)),
+    ('right', (0, -1, 0)), ('ccw', (0, 0, 1)), ('cw', (0, 0, -1)),
 ]
 
 
@@ -67,6 +67,34 @@ def thruster_geometry(path):
         directions.append(d)
         arms.append(float(r[0] * d[1] - r[1] * d[0]))
     return names, np.array(directions).T, np.array(arms), thrusters
+
+
+def pure_pairs(names, directions, arms):
+    """
+    For every motion of MOTIONS, the pair of thrusters whose nominal sum is that motion only.
+
+    A pair qualifies when the off-axis force and torque cancel (relative to the pair's own
+    size) and the on-axis component has the right sign; the strongest qualifying pair wins.
+    """
+    wrenches = {n: np.array([directions[0, i], directions[1, i], arms[i]])
+                for i, n in enumerate(names)}
+    sets = []
+    for label, axis in MOTIONS:
+        axis = np.array(axis, dtype=float)
+        best = None
+        for i, a in enumerate(names):
+            for b in names[i + 1:]:
+                total = wrenches[a] + wrenches[b]
+                scale = np.abs(wrenches[a]) + np.abs(wrenches[b])
+                along = float(total @ axis)
+                if along <= 0 or np.any(np.abs(total * (axis == 0)) > 1e-6 * scale + 1e-12):
+                    continue
+                if best is None or along > best[0]:
+                    best = (along, [a, b])
+        if best is None:
+            fail(f'no thruster pair in {names} gives a pure {label} motion; check thrusters.yaml')
+        sets.append((label, best[1]))
+    return sets
 
 
 def fit_rate(times, values):
@@ -209,10 +237,7 @@ def main():
     mass = args.mass_kg or float(trajectory['model']['mass_kg'])
     bounds = trajectory['limits']['position_bounds_m']
     nominal_inertia = float(trajectory['model']['inertia_kg_m2'])
-    for _, members in DEFAULT_SETS:
-        missing = [n for n in members if n not in names]
-        if missing:
-            fail(f'thruster set needs {missing}, not in thrusters.names {names}')
+    sets = pure_pairs(names, directions, arms)
     if any(not 2 <= w <= 1000 for w in args.widths_ms) or args.gap_ms < 20 \
             or args.open_ms <= 0 or args.repeats < 1 or mass <= 0:
         fail('widths must be 2-1000 ms, gap >= 20 ms, open time, repeats and mass positive')
@@ -220,13 +245,15 @@ def main():
     for width in args.widths_ms:
         count = max(1, round(args.open_ms / width))
         for _ in range(args.repeats):
-            plan += [(width, count, label, members) for label, members in DEFAULT_SETS]
+            plan += [(width, count, label, members) for label, members in sets]
     # The second burst of each pair undoes the first, so only the first waits for rest.
     period = lambda w: (w + args.gap_ms) / 1000.0  # noqa: E731
     total = sum(args.window_s + c * period(w) + args.settle_s + args.window_s
                 for w, c, _, _ in plan)
     print(f'mass {mass} kg, nominal on_thrust '
           f'{[thrusters[n].get("on_thrust_n") for n in names]} N, bounds {bounds}')
+    print('pairs from thrusters.yaml: ' +
+          ', '.join(f'{label} {"+".join(n[-1] for n in members)}' for label, members in sets))
     print(f'{len(plan)} bursts, about {total:.0f} s without waiting for rest:')
     for width in args.widths_ms:
         count = max(1, round(args.open_ms / width))
@@ -363,7 +390,7 @@ def main():
     impulses = {}
     for width in sorted({b['width_ms'] for b in bursts}):
         group = [b for b in bursts if b['width_ms'] == width]
-        if len(group) < len(DEFAULT_SETS):
+        if len(group) < len(sets):
             continue
         impulse, residual, inertia = solve_width(group, names, directions, arms, mass)
         impulses[width] = impulse

@@ -29,11 +29,11 @@ from airtable_bringup.launch_helpers import (
     bringup_share, CONFIG_ARGUMENT, control_include, default_robot_config, entry_description,
     estimator_node, estimator_params_path, is_true, launch_arguments, model_table_positions,
     pc_observation_actions, PC_OBSERVATION_ARGUMENTS, PLANT_ARGUMENT, plant_of,
-    real_tracking_include, reject_for_real, rviz_node, simulation_actions, STATE_SOURCES,
-    table_tf_nodes)
+    real_tracking_include, reject_for_real, rviz_node, SIM_CLOCK_ARGUMENT, simulation_actions,
+    STATE_SOURCES, table_tf_nodes)
 from airtable_bringup.robot_config import (
     ConfigError, effective_trajectory, initial_pose, launch_trajectory_overrides,
-    load_robot_config, ros_parameters, select_robots, summary)
+    load_robot_config, pulse_thrust_caps, pulse_timing, ros_parameters, select_robots, summary)
 from launch.actions import LogInfo
 import launch.logging
 from launch_ros.actions import Node
@@ -49,6 +49,9 @@ ARGUMENTS = [
     ('radius', '', 'Circle radius [m]'),
     ('direction', '', 'Line direction [rad]'),
     ('fixed_yaw', '', 'Fixed yaw [rad]'),
+    ('pulse_duration', '', 'Valve pulse width [s] for every selected robot (YAML: 0.01)'),
+    ('pulse_period', '', 'Minimum start-to-start time of the pulses of one thruster [s]; '
+                         'empty: the width. max_thrust_n is lowered to on_thrust_n*width/period'),
     ('circle_center_x', '', 'Circle center in each table frame [m]'),
     ('circle_center_y', '', 'Circle center in each table frame [m]'),
     ('enabled', '', 'Start output enabled; empty: true for sim, false for real'),
@@ -69,14 +72,15 @@ ARGUMENTS = [
     ('initial_yaw', '', 'plant:=sim: initial yaw [rad]'),
     ('viewer', 'true', 'plant:=sim: open the MuJoCo viewer'),
     ('camera_fps', '90.0', 'plant:=sim: rendered camera rate (real RealSense: 90)'),
+    SIM_CLOCK_ARGUMENT,
     ('disturbance', 'false', 'plant:=sim: scripted disturbance publisher for one robot'),
     ('disturbance_robot', '', 'Target of disturbance:=true; required with several robots'),
     ('disturbance_params_file', '', 'Disturbance ROS parameters; empty: config/disturbance.yaml'),
     *PC_OBSERVATION_ARGUMENTS,
 ]
 SIM_ONLY = {'model_path': '', 'initial_x': '', 'initial_y': '', 'initial_yaw': '',
-            'viewer': 'true', 'camera_fps': '90.0', 'disturbance': 'false',
-            'disturbance_robot': '', 'disturbance_params_file': ''}
+            'viewer': 'true', 'camera_fps': '90.0', 'sim_clock_origin': 'wall',
+            'disturbance': 'false', 'disturbance_robot': '', 'disturbance_params_file': ''}
 
 
 def disturbance_frame(frame, robot):
@@ -104,7 +108,8 @@ def simulation(args, config, robots, launch_overrides):
     actions = [LogInfo(msg=f'initial poses (table frames): {poses}')]
     actions += simulation_actions(robots, model=model, viewer=is_true(args['viewer']),
                                   camera_fps=args['camera_fps'],
-                                  tracking=is_true(args['tracking']), poses=poses)
+                                  tracking=is_true(args['tracking']), poses=poses,
+                                  clock_origin=args['sim_clock_origin'])
     if is_true(args['disturbance']):
         names = [robot['namespace'] for robot in robots]
         target = args['disturbance_robot'] or (names[0] if len(names) == 1 else '')
@@ -131,8 +136,15 @@ def setup(context):
     config = load_robot_config(args['robot_config'] or default_robot_config())
     robots = select_robots(config, args['robots'])
     launch_overrides = launch_trajectory_overrides(args)
+    pulse_notes = []
     for robot in robots:
-        effective_trajectory(robot, launch_overrides)
+        params = effective_trajectory(robot, launch_overrides)
+        caps = pulse_thrust_caps(robot, params).get('thrusters', {})
+        width, period = pulse_timing(params)
+        lowered = {name: round(cap['max_thrust_n'], 4) for name, cap in caps.items()}
+        pulse_notes.append(f'{robot["namespace"]}: {width * 1e3:g} ms pulses every '
+                           f'>= {period * 1e3:g} ms' +
+                           (f', max_thrust_n lowered to {lowered}' if lowered else ''))
     sim = plant == 'sim'
     enabled = args['enabled'] or ('true' if sim else 'false')
     source = args['state_source'] or ('truth' if sim else 'estimator')
@@ -144,7 +156,7 @@ def setup(context):
         raise ConfigError('state_source:=estimator in simulation needs tracking:=true '
                           '(the EKF input is the rendered-image ArUco pose)')
     actions = [LogInfo(msg=f'trajectory: plant={plant}, state_source={source}\n' +
-                       summary(config, robots))]
+                       summary(config, robots) + '\n' + '\n'.join(pulse_notes))]
     if sim:
         sim_actions, model = simulation(args, config, robots, launch_overrides)
         actions += sim_actions
@@ -177,8 +189,12 @@ def setup(context):
                                  table_xy=table_xy, use_sim_time=sim))
     snapshots = [estimator_params_path(args['estimator_params'])] \
         if source == 'estimator' else []
+    trajectories = {effective_trajectory(robot, launch_overrides)['trajectory']['type']
+                    for robot in robots}
+    trajectory = trajectories.pop() if len(trajectories) == 1 else 'mixed'
     actions += pc_observation_actions(args, entry='trajectory', plant=plant, config=config,
-                                      robots=robots, snapshots=snapshots)
+                                      robots=robots, snapshots=snapshots,
+                                      session={'trajectory': trajectory, 'state_source': source})
     return actions
 
 

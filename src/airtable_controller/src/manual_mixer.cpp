@@ -9,42 +9,44 @@ namespace airtable_controller
     {
         using Command = airtable_interfaces::msg::ManualMotionCommand;
 
-        // Body frame: +X forward, +Y left, +yaw counterclockwise.
+        // Body frame: +X forward, +Y left, +yaw counterclockwise. Pairs follow
+        // config/thrusters.yaml (nozzles exhaust outward, pushing the robot inward);
+        // scripts/check_sim_model.py checks them against the simulated motion.
         switch (command){
             case Command::FORWARD:
                 return {
-                    "thruster_3",
+                    "thruster_2",
                     "thruster_4",
                 };
 
             case Command::BACKWARD:
                 return {
                     "thruster_1",
-                    "thruster_2",
+                    "thruster_3",
                 };
 
             case Command::RIGHT:
                 return {
+                    "thruster_1",
                     "thruster_2",
-                    "thruster_3",
                 };
 
             case Command::LEFT:
                 return {
-                    "thruster_1",
+                    "thruster_3",
                     "thruster_4",
                 };
 
             case Command::THRUSTER_ROTATE_CCW:
                 return {
                     "thruster_1",
-                    "thruster_3",
+                    "thruster_4",
                 };
 
             case Command::THRUSTER_ROTATE_CW:
                 return {
                     "thruster_2",
-                    "thruster_4",
+                    "thruster_3",
                 };
 
             default:

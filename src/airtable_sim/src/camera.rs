@@ -11,7 +11,7 @@ use mujoco_rs::renderer::MjRenderer;
 use rclrs::{IntoPrimitiveOptions, Node, Publisher};
 use sensor_msgs::msg::{CameraInfo, Image};
 
-use crate::ros::conversions::sim_time_to_ros_time;
+use crate::ros::conversions::SimClock;
 
 /// Topic namespace and optical frame of the original single-camera setup.
 pub const LEGACY_NAMESPACE: &str = "/sim/camera";
@@ -59,6 +59,7 @@ pub struct CameraSensor {
     views: Vec<CameraView>,
     fps: f64,
     last_frame: Option<u64>,
+    clock: SimClock,
 }
 
 /// Validate camera specs against a model; returns (camera id, width, height) each.
@@ -126,6 +127,7 @@ impl CameraSensor {
         model_path: &str,
         specs: &[CameraSpec],
         fps: f64,
+        clock: SimClock,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         if !fps.is_finite() || fps <= 0.0 || fps > 100.0 {
             return Err("camera_fps must be finite and in (0, 100]".into());
@@ -166,6 +168,7 @@ impl CameraSensor {
             views,
             fps,
             last_frame: None,
+            clock,
         })
     }
 
@@ -188,7 +191,7 @@ impl CameraSensor {
         self.data.qpos_mut().copy_from_slice(&snapshot.qpos);
         self.data.set_time(snapshot.time);
         self.data.forward();
-        let stamp = sim_time_to_ros_time(snapshot.time);
+        let stamp = self.clock.to_ros(snapshot.time);
         for view in &self.views {
             self.renderer.set_camera(MjvCamera::new_fixed(view.id));
             self.renderer.sync_data(&mut self.data)?;

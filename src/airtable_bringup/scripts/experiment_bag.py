@@ -3,6 +3,7 @@
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import shlex
@@ -18,6 +19,19 @@ from datetime import timezone
 from pathlib import Path
 
 import yaml
+
+UPLOAD_LOG = 'foxglove_upload.log'
+UPLOAD_STATE = 'foxglove_upload.yaml'
+MIN_UPLOAD_TIME_NS = 946_684_800 * 10**9  # 2000-01-01: anything earlier is a zero-based clock
+# Foxglove session properties (key: label, enum values); foxglove-setup defines them once.
+SESSION_PROPERTIES = {
+    'plant': ('Plant', ['sim', 'real']),
+    'launch': ('Launch', ['manual', 'trajectory']),
+    'trajectory': ('Trajectory', ['line', 'circle', 'mixed']),
+    'state_source': ('State source', ['truth', 'estimator', 'external']),
+}
+PROFILE_PLANTS = {'sim': 'sim', 'dual_sim': 'sim', 'real': 'real', 'dual_real': 'real',
+                  'hardware': 'real'}
 
 
 def timestamp():
@@ -305,6 +319,14 @@ def record(args):
     snapshots = [Path(value).expanduser().resolve(strict=True) for value in args.snapshot]
     if any(not path.is_file() for path in snapshots):
         raise ValueError('--snapshot accepts files, not directories')
+    if args.upload:
+        # Fail before the experiment, not after it.
+        if config['storage'] != 'mcap':
+            raise ValueError('--upload needs MCAP storage')
+        if not args.upload_device:
+            raise ValueError('--upload needs a device name')
+        if not shutil.which('foxglove'):
+            raise ValueError('foxglove CLI not found on PATH')
     if args.dry_run:
         print(yaml.safe_dump(config, sort_keys=False), end='')
         print(shlex.join(record_command(config, Path('<run>/bag'), Path('<run>/qos.yaml'))))
@@ -329,8 +351,236 @@ def record(args):
             'ROS_DISTRO', 'ROS_DOMAIN_ID', 'RMW_IMPLEMENTATION', 'ROS_LOCALHOST_ONLY',
             'ROS_AUTOMATIC_DISCOVERY_RANGE')},
     }
-    return execute(record_command(config, run_dir / 'bag', run_dir / 'qos.yaml'),
+    code = execute(record_command(config, run_dir / 'bag', run_dir / 'qos.yaml'),
                    run_dir, manifest, config['topics'])
+    if code == 0 and args.upload:
+        start_background_upload(run_dir, args.upload_device, args.upload_project)
+    return code
+
+
+def start_background_upload(run_dir, device, project):
+    """Upload in its own session: launch kills its children soon after Ctrl+C."""
+    log_path = run_dir / UPLOAD_LOG
+    command = [sys.executable, str(Path(__file__).resolve()), 'upload', str(run_dir),
+               '--device', device]
+    if project:
+        command += ['--project', project]
+    with log_path.open('a') as log:
+        subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log,
+                         stderr=subprocess.STDOUT, start_new_session=True)
+    print(f'Uploading to Foxglove in the background; log: {log_path}', flush=True)
+
+
+def upload_segments(run_dir, allow_epoch_time=False):
+    """Return the manifest and MCAP files of a completed run, refusing misplaced data."""
+    manifest = yaml.safe_load((run_dir / 'experiment.yaml').read_text())
+    if not isinstance(manifest, dict) or manifest.get('status') != 'completed':
+        raise ValueError(f'{run_dir} is not a completed recording')
+    metadata = yaml.safe_load((run_dir / 'bag' / 'metadata.yaml').read_text())[
+        'rosbag2_bagfile_information']
+    start = metadata['starting_time']['nanoseconds_since_epoch']
+    if start < MIN_UPLOAD_TIME_NS and not allow_epoch_time:
+        raise ValueError('The recording starts near 1970 (simulation time from 0), so runs '
+                         'would overlap in Foxglove. Pass --allow-epoch-time to upload anyway')
+    bag = (run_dir / 'bag').resolve()
+    segments = [(bag / name).resolve() for name in metadata['relative_file_paths']]
+    if not segments or any(path.parent != bag or path.suffix != '.mcap' or not path.is_file()
+                           for path in segments):
+        raise ValueError(f'{bag} does not contain the MCAP files listed in its metadata')
+    return manifest, segments
+
+
+def foxglove_cli(*arguments):
+    """Run the Foxglove CLI without a terminal and keep its output."""
+    return subprocess.run(['foxglove', *arguments], stdin=subprocess.DEVNULL,
+                          capture_output=True, text=True, errors='replace')
+
+
+def cli_output(result, action):
+    """Return stdout of a successful CLI call, or raise with its error message."""
+    if result.returncode:
+        message = (result.stderr.strip() or result.stdout.strip())[-500:]
+        raise RuntimeError(f'{action} failed: {message}')
+    return result.stdout
+
+
+def project_option(project):
+    """Return the optional project argument of the Foxglove CLI."""
+    return ['--project-id', project] if project else []
+
+
+def not_found(result):
+    """Tell a missing resource from a login or network failure."""
+    return result.returncode != 0 and 'not found' in (result.stderr + result.stdout).lower()
+
+
+def session_definitions():
+    """Return the organization's session properties as {key: enum values}."""
+    data = json.loads(cli_output(foxglove_cli(
+        'custom-properties', 'list', '--resource-type', 'session', '--format', 'json'),
+        'Reading Foxglove session properties'))
+    items = data['data'] if isinstance(data, dict) else data
+    return {item['key']: item.get('enumValues') or [] for item in items}
+
+
+def session_properties(manifest):
+    """Experiment conditions saved by the launch; plant falls back to the recording profile."""
+    metadata = manifest.get('metadata') or {}
+    properties = {key.removeprefix('session.'): value for key, value in metadata.items()
+                  if key.startswith('session.')}
+    if 'plant' not in properties and manifest.get('profile') in PROFILE_PLANTS:
+        properties['plant'] = PROFILE_PLANTS[manifest['profile']]
+    for key, value in properties.items():
+        if key not in SESSION_PROPERTIES or value not in SESSION_PROPERTIES[key][1]:
+            raise ValueError(f'Invalid session property {key}={value!r}')
+    return properties
+
+
+def session_name(manifest, properties):
+    """Readable session name: <plant>_<experiment>_<local start time>."""
+    plant = properties.get('plant')
+    launch = properties.get('launch')
+    label = manifest.get('label') or 'experiment'
+    if launch and label == f'{launch}_{plant}':  # the launch's default label
+        label = properties.get('trajectory', launch)
+    elif plant and label.startswith(f'{plant}_'):
+        label = label[len(plant) + 1:] or label
+    started = datetime.fromisoformat(manifest['started_at']).astimezone()
+    return '_'.join(part for part in (plant, label, started.strftime('%Y-%m-%d_%H%M')) if part)
+
+
+def available_session_key(name, project):
+    """Session keys are unique in a project; repeated names get _2, _3, ..."""
+    options = project_option(project)
+    for index in range(1, 100):
+        key = name if index == 1 else f'{name}_{index}'
+        result = foxglove_cli('sessions', 'get', key, *options)
+        if not_found(result):
+            return key
+        cli_output(result, 'Reading the Foxglove session')
+    raise RuntimeError(f'No free Foxglove session key for {name}')
+
+
+def ensure_session(stored, run_name, name, device, project, properties, create):
+    """
+    Return the run's session key, creating or updating the session.
+
+    A session from before readable names (keyed by the run directory) is renamed. With
+    create=False every segment is already uploaded, so a new session would stay empty.
+    """
+    defined = session_definitions()
+    missing = [f'{name}={value}' for name, value in properties.items()
+               if value not in defined.get(name, [])]
+    if missing:
+        raise ValueError(f'Foxglove does not define session properties {missing}; '
+                         'run once: ros2 run airtable_bringup experiment_bag foxglove-setup')
+    pairs = [item for name, value in properties.items()
+             for item in ('--property', f'{name}:{value}')]
+    options = project_option(project)
+    if stored:
+        found = foxglove_cli('sessions', 'get', stored, *options)
+        if found.returncode == 0:
+            key = available_session_key(name, project) if stored == run_name else stored
+            rename = ['--key', key] if key != stored else []
+            if rename or pairs:
+                cli_output(foxglove_cli('sessions', 'edit', stored, *rename, *pairs, *options),
+                           'Updating the Foxglove session')
+            return key
+        if not not_found(found):
+            cli_output(found, 'Reading the Foxglove session')
+    if not create:
+        raise ValueError(f'{run_name} is uploaded but has no Foxglove session; '
+                         '--force uploads it again into a new session')
+    key = available_session_key(name, project)
+    identity = json.loads(cli_output(
+        foxglove_cli('devices', 'get', device, '--format', 'json', *options),
+        f'Reading Foxglove device {device} (create it with experiment_bag foxglove-setup)'))
+    cli_output(foxglove_cli('sessions', 'add', '--device-id', identity['id'], '--key', key,
+                            *pairs, *options), 'Creating the Foxglove session')
+    return key
+
+
+def foxglove_setup(args):
+    """Define the session properties and the device once; safe to run again."""
+    if not shutil.which('foxglove'):
+        raise ValueError('foxglove CLI not found on PATH')
+    defined = session_definitions()
+    for key, (label, values) in SESSION_PROPERTIES.items():
+        if key in defined:
+            absent = [value for value in values if value not in defined[key]]
+            if absent:
+                raise ValueError(f'Session property {key} exists without values {absent}; '
+                                 'add them with foxglove custom-properties edit')
+            print(f'Session property exists: {key}', flush=True)
+            continue
+        enum_values = [item for value in values for item in ('--enum-value', value)]
+        cli_output(foxglove_cli('custom-properties', 'add', '--key', key, '--label', label,
+                                '--resource-type', 'session', '--value-type', 'enum',
+                                *enum_values), f'Creating session property {key}')
+        print(f'Created session property: {key}', flush=True)
+    options = project_option(args.project)
+    device = foxglove_cli('devices', 'get', args.device, '--format', 'json', *options)
+    if device.returncode == 0:
+        print(f'Device exists: {args.device}', flush=True)
+    elif not_found(device):
+        cli_output(foxglove_cli('devices', 'add', '--name', args.device, *options),
+                   f'Creating device {args.device}')
+        print(f'Created device: {args.device}', flush=True)
+    else:
+        cli_output(device, f'Reading device {args.device}')
+    return 0
+
+
+def upload(args):
+    """Send each segment once into the run's session; finished ones are skipped on retry."""
+    run_dir = Path(args.run).expanduser().resolve(strict=True)
+    if not args.device:
+        raise ValueError('--device must not be empty')
+    if not shutil.which('foxglove'):
+        raise ValueError('foxglove CLI not found on PATH')
+    manifest, segments = upload_segments(run_dir, args.allow_epoch_time)
+    properties = session_properties(manifest)
+    state_path = run_dir / UPLOAD_STATE
+    state = yaml.safe_load(state_path.read_text()) if state_path.is_file() else {}
+    files = state.setdefault('files', {})
+    pending = args.force or any(files.get(path.name, {}).get('status') != 'uploaded'
+                                for path in segments)
+    # Before any data: a recording must not land outside its category.
+    session_key = ensure_session((state.get('session') or {}).get('key'), run_dir.name,
+                                 session_name(manifest, properties), args.device, args.project,
+                                 properties, create=pending)
+    print(f'Foxglove session {session_key}: {properties}', flush=True)
+    state.update(device=args.device, project=args.project or None,
+                 session={'key': session_key, 'properties': properties})
+    write_yaml(state_path, state)
+    with tempfile.TemporaryDirectory(prefix='airtable_foxglove_upload_') as temporary:
+        for path in segments:
+            if files.get(path.name, {}).get('status') == 'uploaded' and not args.force:
+                print(f'Already uploaded: {path.name}', flush=True)
+                continue
+            # Foxglove shows the file name; every run's first segment is bag_0.mcap.
+            link = Path(temporary) / f'{run_dir.name}_{path.name}'
+            link.symlink_to(path)
+            command = ['foxglove', 'upload', str(link), '--device-name', args.device,
+                       '--session-key', session_key]
+            if args.project:
+                command += ['--project-id', args.project]
+            print(f'Uploading {path.name} as {link.name}', flush=True)
+            result = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True,
+                                    text=True, errors='replace')
+            output = (result.stderr.strip() or result.stdout.strip())[-500:]
+            files[path.name] = {
+                'status': 'uploaded' if result.returncode == 0 else 'failed',
+                'name': link.name, 'finished_at': timestamp(), 'output': output}
+            write_yaml(state_path, state)
+            if result.returncode:
+                print(f'Upload failed: {output}\nRetry: experiment_bag upload {run_dir}',
+                      file=sys.stderr, flush=True)
+                return 1
+            print(output, flush=True)
+    print('Upload accepted; Foxglove imports it in the background '
+          '(check with: foxglove pending-imports list)', flush=True)
+    return 0
 
 
 @contextmanager
@@ -404,7 +654,24 @@ def main(argv=None):
     recorder.add_argument('--snapshot', action='append', default=[], metavar='FILE',
                           help='Copy an input YAML, launch file or model into the experiment')
     recorder.add_argument('--dry-run', action='store_true', help='Print settings; create no files')
+    recorder.add_argument('--upload', action='store_true',
+                          help='After a completed recording, upload it to Foxglove')
+    recorder.add_argument('--upload-device', default='airtable-pc', help='Foxglove device name')
+    recorder.add_argument('--upload-project', default='', help='Foxglove project ID')
     recorder.set_defaults(action=record)
+    uploader = subparsers.add_parser('upload', help='Upload a recorded run to Foxglove')
+    uploader.add_argument('run', help='Experiment directory under recordings/')
+    uploader.add_argument('--device', default='airtable-pc', help='Foxglove device name')
+    uploader.add_argument('--project', default='', help='Foxglove project ID')
+    uploader.add_argument('--force', action='store_true', help='Upload finished segments again')
+    uploader.add_argument('--allow-epoch-time', action='store_true',
+                          help='Upload a recording whose time starts near 1970')
+    uploader.set_defaults(action=upload)
+    setup = subparsers.add_parser('foxglove-setup',
+                                  help='Define Foxglove session properties and the device once')
+    setup.add_argument('--device', default='airtable-pc', help='Foxglove device name')
+    setup.add_argument('--project', default='', help='Foxglove project ID')
+    setup.set_defaults(action=foxglove_setup)
     converter = subparsers.add_parser('convert', help='Convert an existing ROS 2 bag to MCAP')
     converter.add_argument('input', help='Bag directory (all split segments) or .db3/.mcap file')
     converter.add_argument('--output-root', default='recordings')
@@ -412,7 +679,8 @@ def main(argv=None):
     converter.set_defaults(action=convert)
     args = parser.parse_args(argv)
     try:
-        if not shutil.which('ros2') and not getattr(args, 'dry_run', False):
+        if args.operation in ('record', 'convert') and not shutil.which('ros2') and \
+                not getattr(args, 'dry_run', False):
             raise ValueError('ros2 not found; source /opt/ros/jazzy/setup.bash first')
         return args.action(args)
     except (OSError, ValueError, RuntimeError, yaml.YAMLError) as error:

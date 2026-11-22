@@ -10,8 +10,8 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 from airtable_bringup.robot_config import (
-    check_simulation_cameras, check_simulation_model, ConfigError, merge, package_share,
-    resolve_path, select_robots, yaml_argument)
+    check_simulation_cameras, check_simulation_model, ConfigError, effective_trajectory, merge,
+    package_share, pulse_thrust_caps, resolve_path, select_robots, yaml_argument)
 import yaml
 
 PLANTS = ('sim', 'real')
@@ -19,6 +19,10 @@ PLANT_ARGUMENT = ('plant', 'sim', "sim: run MuJoCo on this PC; real: the robot's
                   'runs hardware.launch.py')
 CONFIG_ARGUMENT = ('robot_config', '',
                    'Robot configuration YAML; empty: config/robots/single_robot.yaml')
+SIM_CLOCK_ORIGINS = ('wall', 'zero')
+SIM_CLOCK_ARGUMENT = ('sim_clock_origin', 'wall',
+                      'plant:=sim: wall: /clock starts at the current date (recordings of '
+                      'different runs do not overlap); zero: /clock starts at 0')
 
 
 def bringup_share(*parts):
@@ -80,10 +84,14 @@ def select_one(config, name):
     return robots[0]
 
 
-def simulation_actions(robots, *, model, viewer, camera_fps, tracking, poses):
+def simulation_actions(robots, *, model, viewer, camera_fps, tracking, poses,
+                       clock_origin='wall'):
     """Start one MuJoCo simulator for the robots, plus per-table camera observation."""
     from launch_ros.actions import Node
 
+    if clock_origin not in SIM_CLOCK_ORIGINS:
+        raise ConfigError(f'sim_clock_origin must be one of {list(SIM_CLOCK_ORIGINS)}, '
+                          f'got {clock_origin!r}')
     check_simulation_model(model, robots)
     if tracking:
         missing = [robot['namespace'] for robot in robots
@@ -95,6 +103,7 @@ def simulation_actions(robots, *, model, viewer, camera_fps, tracking, poses):
     sim_params = {
         # The simulator's wall timers produce /clock; they must not wait on that clock.
         'use_sim_time': False,
+        'clock_origin': clock_origin,
         'model_path': model,
         'viewer': viewer,
         'enable_camera': tracking,
@@ -174,7 +183,8 @@ def _tracking_include(arguments):
 
 
 # Fixed RViz layouts in rviz/ (robot_1, single camera); generated otherwise.
-STATIC_RVIZ = {'tracking': 'tracking.rviz', 'tracking_real': 'tracking_real.rviz'}
+STATIC_RVIZ = {'tracking': 'tracking.rviz', 'tracking_real': 'tracking_real.rviz',
+               'sun_sensor': 'sun_sensor.rviz'}
 
 
 def static_rviz_node(name, *, use_sim_time):
@@ -203,6 +213,8 @@ def control_include(robot, *, use_sim_time, enabled, state_topic, launch_overrid
     from launch_ros.substitutions import FindPackageShare
 
     trajectory = merge(robot['trajectory_overrides'], launch_overrides or {})
+    thruster_overrides = merge(robot['thruster_overrides'], pulse_thrust_caps(
+        robot, effective_trajectory(robot, launch_overrides)))
     arguments = {
         'namespace': robot['namespace'],
         'use_sim_time': 'true' if use_sim_time else 'false',
@@ -212,8 +224,8 @@ def control_include(robot, *, use_sim_time, enabled, state_topic, launch_overrid
         'params_file': str(robot['trajectory_params']),
         'thruster_params_file': str(robot['thruster_params']),
         'trajectory_overrides': yaml_argument(trajectory) if trajectory else '',
-        'thruster_overrides': (yaml_argument(robot['thruster_overrides'])
-                               if robot['thruster_overrides'] else ''),
+        'thruster_overrides': (yaml_argument(thruster_overrides)
+                               if thruster_overrides else ''),
     }
     return IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([
@@ -438,8 +450,13 @@ PC_OBSERVATION_ARGUMENTS = [
     ('foxglove_readonly', 'true', 'true: Foxglove only views (no publishing, parameter changes '
                                   'or service calls, so it cannot command the robot)'),
     *RECORD_ARGUMENTS,
-    ('record_images', 'false', 'Also record the configured camera image and camera_info '
-                               '(large: the real camera is 848x480 at 90 Hz)'),
+    ('record_images', 'false', 'Also record the camera image, camera_info and, with tracking, '
+                               'the ArUco result image (large: the real camera is 848x480 at '
+                               '90 Hz)'),
+    ('upload', 'false', 'record:=true: after the recording is saved, upload its MCAP files to '
+                        'Foxglove in the background (needs foxglove auth login)'),
+    ('upload_device', 'airtable-pc', 'Foxglove device name for upload:=true'),
+    ('upload_project', '', 'Foxglove project ID; empty: the foxglove CLI default'),
 ]
 # Bridge capabilities without clientPublish / parameters / services (foxglove_bridge 3.x).
 FOXGLOVE_READONLY_CAPABILITIES = ['connectionGraph', 'assets']
@@ -480,7 +497,8 @@ def record_snapshots(config, robots, *, simulation):
         paths += [robot.get('trajectory_params'), robot.get('thruster_params'),
                   tracking.get('simulation_params' if simulation else 'params'),
                   None if simulation else hardware.get('params'),
-                  None if simulation else hardware.get('rw_params')]
+                  None if simulation else hardware.get('rw_params'),
+                  None if simulation else (hardware.get('sun_sensor') or {}).get('params')]
     return list(dict.fromkeys(str(path) for path in paths if path is not None))
 
 
@@ -495,19 +513,19 @@ def image_topics(robots, *, simulation):
     return list(dict.fromkeys(topic for topic in topics if topic))
 
 
-def moving_marker_topics(robots, *, simulation):
-    """Raw ArUco pose of each robot's moving marker; fixed markers are left out (adr/0023)."""
+def moving_marker_topics(robots, *, simulation, name='pose'):
+    """ArUco pose/result of each robot's moving marker; fixed markers are left out (adr/0023)."""
     topics = []
     for robot in robots:
         tracking = robot.get('tracking', {})
         source = tracking.get('simulation') if simulation else tracking
         if source and source.get('moving_marker_id') is not None:
             topics.append(f"/{robot['namespace']}/tracking/aruco_single_"
-                          f"{source['moving_marker_id']}/pose")
+                          f"{source['moving_marker_id']}/{name}")
     return topics
 
 
-def record_process(args, *, entry, plant, profile, robots, snapshots, topics=()):
+def record_process(args, *, entry, plant, profile, robots, snapshots, topics=(), session=None):
     """
     Run experiment_bag beside the launched system (README of airtable_bringup).
 
@@ -535,9 +553,16 @@ def record_process(args, *, entry, plant, profile, robots, snapshots, topics=())
     for option in ('note', 'output_root', 'config'):
         if args[f'record_{option}']:
             command += [f'--{option.replace("_", "-")}', args[f'record_{option}']]
+    if is_true(args.get('upload', 'false')):
+        command += ['--upload', '--upload-device', args['upload_device']]
+        if args['upload_project']:
+            command += ['--upload-project', args['upload_project']]
     command += ['--meta', f'launch.file={entry}.launch.py', '--meta', f'launch.plant={plant}']
     command += [item for name, value in args.items() if value != '' and name != 'plant'
                 for item in ('--meta', f'launch.{name}={value}')]
+    # Resolved conditions (not just the arguments given) for the Foxglove session.
+    command += [item for name, value in (session or {}).items()
+                for item in ('--meta', f'session.{name}={value}')]
     for path in snapshots:
         command += ['--snapshot', path]
     check = subprocess.run(command + ['--dry-run'], capture_output=True, text=True)
@@ -557,10 +582,24 @@ def valve_state_node(robot, *, use_sim_time):
                 parameters=[{'use_sim_time': use_sim_time, 'thruster_names': list(names)}])
 
 
-def pc_observation_actions(args, *, entry, plant, config, robots, snapshots=()):
+def sun_direction_node(robot):
+    """Arrow marker of the measured sun direction (scripts/sun_direction.py); real robot only."""
+    from launch_ros.actions import Node
+
+    return Node(package='airtable_bringup', executable='sun_direction',
+                name='airtable_sun_direction', namespace=robot['namespace'], output='screen',
+                parameters=[{'use_sim_time': False}])
+
+
+def pc_observation_actions(args, *, entry, plant, config, robots, snapshots=(), session=None):
     """Start foxglove:= and record:= of the PC entry points (PC_OBSERVATION_ARGUMENTS)."""
     simulation = plant == 'sim'
+    if is_true(args['upload']) and not is_true(args['record']):
+        raise ConfigError('upload:=true needs record:=true')
     actions = []
+    if not simulation:
+        actions += [sun_direction_node(robot) for robot in robots
+                    if robot['hardware']['sun_sensor'] is not None]
     if is_true(args['foxglove']) or is_true(args['record']):
         # Display/recording aid only; nothing subscribes to it for control.
         actions += [valve_state_node(robot, use_sim_time=simulation) for robot in robots]
@@ -571,8 +610,11 @@ def pc_observation_actions(args, *, entry, plant, config, robots, snapshots=()):
             if is_true(args['tracking']) else []
         if is_true(args['record_images']):
             topics += image_topics(robots, simulation=simulation)
+            if is_true(args['tracking']):
+                topics += moving_marker_topics(robots, simulation=simulation, name='result')
         actions.append(record_process(
             args, entry=entry, plant=plant, profile=plant, robots=robots, topics=topics,
+            session={'plant': plant, 'launch': entry, **(session or {})},
             snapshots=[*record_snapshots(config, robots, simulation=simulation),
                        *map(str, snapshots)]))
     return actions

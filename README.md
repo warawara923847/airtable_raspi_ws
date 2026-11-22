@@ -4,6 +4,8 @@
 （`airtable_hardware`）は Rust（[rclrs](https://github.com/ros2-rust/ros2_rust)）
 で実装されており、`ament_cargo` ビルドタイプを使用します。
 
+sim・実機の起動方法とFoxglove表示・録画の手順は [実行ガイド](docs/operation-guide.md) に1か所にまとめています。
+
 ## セットアップ（Jazzy）
 
 ### 1. ROS 2 Jazzy と依存パッケージ
@@ -168,6 +170,7 @@ ros2 launch airtable_bringup hardware.launch.py \
 |---|---|---|
 | スラスタバルブ | `thrusters.backend: gpio` | GPIO character device。`thrusters.gpio_lines` は thruster_1〜4 の BCM 番号（既定 19/26/20/21） |
 | RW | `hardware.rw: arw3m`（`config/arw3m.yaml`） | ASPINA ARW-3m（I2C、既定 `/dev/i2c-1` の 0x60）。応答が無ければ起動を拒否 |
+| サンセンサ | `hardware.sun_sensor`（`config/nanossoc.yaml`） | nanoSSOC-D60（I2C、既定 `/dev/i2c-1` の 0x64）。応答が無くても起動し、エラーコードを配信 |
 
 - バルブは常閉として扱い、起動時・パルス終了時・ノード終了時に Low にします。
   パルス長は Pi 側で計時し、`thrusters.max_pulse_ms` を超える指令は短縮します。
@@ -179,6 +182,9 @@ ros2 launch airtable_bringup hardware.launch.py \
 - バルブを繋いだ確認（配線・番号・向き・最短パルス）は [バルブ確認手順](docs/valve-check.md)。
   その後の力積・むだ時間・慣性の測定とパラメータ反映は [スラスタ力積の測定](docs/thruster-impulse.md)。
   `scripts/check_valves.py` が `pulse` を1本ずつ送ります。
+- サンセンサの配線・起動・太陽方向の表示は [サンセンサ手順](docs/sun-sensor.md)、設計判断は
+  [0029](docs/adr/0029-nanossoc-sun-sensor.md)。角度は `/robot_1/measurements/sun_sensor` に出ます。
+  実センサでの通信は未確認です。
 
 設計判断と検証値は
 [0016. Raspberry Pi 向けビルド分離と実I/O](docs/adr/0016-pi-build-and-real-io.md)。
@@ -370,6 +376,8 @@ ros2 service call /robot_1/trajectory/enable std_srvs/srv/SetBool '{data: true}'
 状態の欠測・古い時刻・座標系不一致・非有限値・指定範囲逸脱で自動追従を無効化し、
 明示的な再開を要求します。既定の状態タイムアウトは0.25秒、パルス幅は10 msです。
 これは公称値で、実機の最小噴射時間・弁応答に合わせた調整が必要です。
+遅いバルブ向けに `pulse_duration:=0.02 pulse_period:=0.1`（20 msのパルスを同じスラスタへは100 ms以上あけて）を
+指定でき、配分の推力上限はlaunchが自動で下げます（[adr/0026](docs/adr/0026-pulse-width-and-period.md)）。
 
 実機へ接続する場合は `plant:=real` を指定します。既定では出力無効です。
 
@@ -617,6 +625,9 @@ ros2 launch airtable_bringup trajectory.launch.py trajectory:=circle tracking:=t
 # 実機：PCとPiの両方で録る（Piは自分が受けた指令とIMU等だけ）
 ros2 launch airtable_bringup manual.launch.py plant:=real tracking:=true foxglove:=true record:=true
 ros2 launch airtable_bringup hardware.launch.py record:=true     # Pi
+# PCの録画を保存後にFoxgloveのクラウドへ送る（foxglove auth login 済みであること）
+ros2 launch airtable_bringup trajectory.launch.py trajectory:=circle tracking:=true \
+  record:=true upload:=true record_label:=circle_r020
 ```
 
 単独の録画コマンドも使えます。
